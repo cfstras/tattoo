@@ -10,8 +10,12 @@
 // Format history:
 //  - localStorage 'node-drawing-positions-v1' (since edde8af):
 //    JSON array of [x, y] pairs, full float precision, 100 nodes.
-//  - URL hash (since 755180b): base64 of the same JSON array,
+//  - URL hash v1 (since 755180b): base64 of the same JSON array,
 //    coordinates rounded to 1 decimal, 10-200 nodes.
+//  - URL hash v2 (layers feature): base64 of {p: positions, l: layers}
+//    where layers is 1-5 of {type, color}. Bare-array v1 hashes must
+//    keep decoding. localStorage 'node-drawing-layers-v1' holds the
+//    layers array separately; the positions key keeps the v1 format.
 
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -137,9 +141,13 @@ function check(name, ok, detail) {
   const hashNow = await page.evaluate(() => location.hash.slice(1));
   let hashOk = false;
   try {
-    const arr = JSON.parse(Buffer.from(hashNow, 'base64').toString());
+    // v2 contract: object {p, l}; a bare array (v1) is also acceptable
+    const data = JSON.parse(Buffer.from(hashNow, 'base64').toString());
+    const arr = Array.isArray(data) ? data : data && data.p;
     hashOk = Array.isArray(arr) && arr.length === 100 &&
-      arr.every(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      arr.every(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) &&
+      (Array.isArray(data) || (Array.isArray(data.l) && data.l.length >= 1 &&
+        data.l.every(l => typeof l.type === 'string' && typeof l.color === 'string')));
   } catch (e) { /* hashOk stays false */ }
   check('current share format still matches the documented contract', hashOk);
 

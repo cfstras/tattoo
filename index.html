@@ -6,26 +6,14 @@
 <title>Node Drawing</title>
 <style>
   :root {
-    --bg: #1a1a2e;
-    --node-fill: #16213e;
-    --node-stroke: #e0e0e0;
-    --label: #e0e0e0;
-    --hint: #8890a8;
-    --seq: #4cc9f0;
-    --even: #f72585;
-    --grab: #ffd60a;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #f2f3f7;
-      --node-fill: #ffffff;
-      --node-stroke: #2b3350;
-      --label: #2b3350;
-      --hint: #6b7288;
-      --seq: #0077b6;
-      --even: #d61f69;
-      --grab: #b8860b;
-    }
+    --bg: #f2f3f7;
+    --node-fill: #ffffff;
+    --node-stroke: #2b3350;
+    --label: #2b3350;
+    --hint: #6b7288;
+    --accent: #0077b6;
+    --danger: #d61f69;
+    --grab: #b8860b;
   }
   html, body {
     margin: 0;
@@ -40,8 +28,7 @@
     display: block;
     touch-action: none;
   }
-  .edge-seq { stroke: var(--seq); stroke-width: 1.5; }
-  .edge-even { stroke: var(--even); stroke-width: 1.5; }
+  .edge { stroke-width: 1.5; }
   .node .hit { fill: transparent; cursor: grab; }
   .node .dot {
     fill: var(--node-fill);
@@ -83,19 +70,21 @@
     padding: 4px 12px;
     cursor: pointer;
   }
-  .btn:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   dialog {
     background: var(--node-fill);
     color: var(--label);
     border: 1.5px solid var(--node-stroke);
     border-radius: 10px;
     padding: 20px;
-    max-width: 320px;
+    width: min(360px, 90vw);
+    box-sizing: border-box;
     font-family: inherit;
   }
   dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   dialog h2 { margin: 0 0 8px; font-size: 16px; }
-  dialog p { margin: 0 0 16px; font-size: 13px; color: var(--hint); }
+  dialog h3 { margin: 16px 0 8px; font-size: 13px; }
+  dialog p { margin: 0 0 12px; font-size: 13px; color: var(--hint); }
   dialog label {
     display: flex;
     align-items: center;
@@ -112,12 +101,48 @@
     display: block;
     width: 100%;
     margin: 0 0 12px;
-    accent-color: var(--seq);
+    accent-color: var(--accent);
   }
+  dialog select {
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 6px;
+    background: var(--bg);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 6px;
+    min-width: 0;
+  }
+  #layers {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .layer-row select { flex: 1; }
+  .layer-swatch {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+  .layer-remove {
+    flex: none;
+    padding: 4px 9px;
+    line-height: 1;
+  }
+  #add-layer { margin: 0 0 4px; }
   dialog .actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    margin-top: 16px;
   }
   dialog button {
     font: inherit;
@@ -129,16 +154,17 @@
     color: var(--label);
     border: 1.5px solid var(--node-stroke);
   }
-  dialog button:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+  dialog button:disabled { opacity: 0.4; cursor: default; }
+  dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #do-reset {
-    background: var(--even);
+    background: var(--danger);
     color: #fff;
-    border-color: var(--even);
+    border-color: var(--danger);
   }
   #apply-settings {
-    background: var(--seq);
+    background: var(--accent);
     color: #fff;
-    border-color: var(--seq);
+    border-color: var(--accent);
   }
 </style>
 </head>
@@ -164,6 +190,9 @@
   </label>
   <input type="range" id="node-count" min="10" max="200" step="1">
   <p>Changing the count resets the layout.</p>
+  <h3>Layers</h3>
+  <div id="layers"></div>
+  <button id="add-layer" type="button">Add layer</button>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
     <button id="apply-settings" type="button">Apply</button>
@@ -182,9 +211,48 @@
   const NODE_R = 11;
   const HIT_R = 18; // larger invisible target for fingers
   const MIN_NODES = 10, MAX_NODES = 200, DEFAULT_NODES = 100;
+  const MAX_LAYERS = 5;
   let N = DEFAULT_NODES;
   const nodes = []; // {x, y, g}
   const edges = []; // {a, b, line}
+
+  // Connection types: which node numbers belong to a layer's chain
+  const TYPES = {
+    all:   { label: 'All nodes',      member: n => true },
+    even:  { label: 'Even numbers',   member: n => n % 2 === 0 },
+    odd:   { label: 'Odd numbers',    member: n => n % 2 === 1 },
+    mult3: { label: 'Multiples of 3', member: n => n % 3 === 0 },
+    mult4: { label: 'Multiples of 4', member: n => n % 4 === 0 },
+    mult5: { label: 'Multiples of 5', member: n => n % 5 === 0 },
+  };
+
+  // 10 color presets
+  const PRESETS = {
+    black:  '#000000',
+    red:    '#dc2626',
+    blue:   '#2563eb',
+    green:  '#16a34a',
+    orange: '#ea580c',
+    purple: '#7c3aed',
+    teal:   '#0d9488',
+    pink:   '#db2777',
+    yellow: '#eab308',
+    gray:   '#6b7280',
+  };
+
+  const DEFAULT_LAYERS = [
+    { type: 'all', color: 'black' },
+    { type: 'even', color: 'red' },
+  ];
+  let layers = DEFAULT_LAYERS.map(l => ({ ...l }));
+
+  function validLayers(arr) {
+    return Array.isArray(arr) &&
+      arr.length >= 1 && arr.length <= MAX_LAYERS &&
+      arr.every(l => l && typeof l === 'object' &&
+        Object.prototype.hasOwnProperty.call(TYPES, l.type) &&
+        Object.prototype.hasOwnProperty.call(PRESETS, l.color));
+  }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -194,29 +262,39 @@
     return el;
   }
 
-  function addEdge(a, b, cls) {
-    const line = make('line', { class: cls });
-    edgesLayer.appendChild(line);
-    edges.push({ a, b, line });
+  function rebuildEdges() {
+    edges.length = 0;
+    edgesLayer.textContent = '';
+    layers.forEach((layer, li) => {
+      const members = [];
+      for (let i = 0; i < N; i++) {
+        if (TYPES[layer.type].member(i + 1)) members.push(i);
+      }
+      // open chain: consecutive members, no wrap from last back to first
+      for (let k = 0; k < members.length - 1; k++) {
+        const line = make('line', {
+          class: 'edge',
+          stroke: PRESETS[layer.color],
+          'data-layer': li,
+        });
+        edgesLayer.appendChild(line);
+        edges.push({ a: members[k], b: members[k + 1], line });
+      }
+    });
+    for (const e of edges) {
+      e.line.setAttribute('x1', nodes[e.a].x);
+      e.line.setAttribute('y1', nodes[e.a].y);
+      e.line.setAttribute('x2', nodes[e.b].x);
+      e.line.setAttribute('y2', nodes[e.b].y);
+    }
   }
 
   function buildGraph(n) {
     N = n;
     nodes.length = 0;
-    edges.length = 0;
-    edgesLayer.textContent = '';
     nodesLayer.textContent = '';
 
     for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
-
-    // Sequential chain: 1-2, 2-3, ..., ending at N (no wrap back to 1)
-    for (let i = 0; i < N - 1; i++) addEdge(i, i + 1, 'edge-seq');
-    // Even chain in a second color: 2-4, 4-6, ... ending at the last even
-    const evens = [];
-    for (let i = 1; i < N; i += 2) evens.push(i);
-    for (let k = 0; k < evens.length - 1; k++) {
-      addEdge(evens[k], evens[k + 1], 'edge-even');
-    }
 
     nodes.forEach((node, i) => {
       const g = make('g', { class: 'node' });
@@ -262,15 +340,10 @@
 
   function redrawAll() {
     for (let i = 0; i < N; i++) updateNode(i);
-    for (const e of edges) {
-      e.line.setAttribute('x1', nodes[e.a].x);
-      e.line.setAttribute('y1', nodes[e.a].y);
-      e.line.setAttribute('x2', nodes[e.b].x);
-      e.line.setAttribute('y2', nodes[e.b].y);
-    }
+    rebuildEdges();
   }
 
-  // ---- State serialization (shared by localStorage and share links) ----
+  // ---- State serialization (localStorage and share links) ----
   function statePositions() {
     return nodes.map(n => [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10]);
   }
@@ -286,21 +359,28 @@
     arr.forEach((p, i) => { nodes[i].x = p[0]; nodes[i].y = p[1]; });
   }
 
+  // Share format v2: base64 JSON object {p: positions, l: layers}.
+  // v1 (a bare positions array) must keep decoding forever.
   function encodeState() {
-    return btoa(JSON.stringify(statePositions()));
+    return btoa(JSON.stringify({ p: statePositions(), l: layers }));
   }
 
   function decodeState(str) {
     try {
-      const arr = JSON.parse(atob(str));
-      return validPositions(arr) ? arr : null;
+      const data = JSON.parse(atob(str));
+      if (validPositions(data)) return { p: data, l: null }; // legacy v1
+      if (data && validPositions(data.p)) {
+        return { p: data.p, l: validLayers(data.l) ? data.l : null };
+      }
+      return null;
     } catch (e) {
       return null;
     }
   }
 
-  // ---- Persist node positions whenever a drag finishes ----
+  // ---- Persistence ----
   const STORAGE_KEY = 'node-drawing-positions-v1';
+  const LAYERS_KEY = 'node-drawing-layers-v1';
 
   function saveState() {
     try {
@@ -308,14 +388,29 @@
     } catch (e) { /* storage unavailable (private mode, quota) — skip */ }
   }
 
+  function saveLayers() {
+    try {
+      localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
+    } catch (e) { /* ignore */ }
+  }
+
   function clearSavedState() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
   }
 
-  function loadStoredState() {
+  function loadStoredPositions() {
     try {
       const arr = JSON.parse(localStorage.getItem(STORAGE_KEY));
       return validPositions(arr) ? arr : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function loadStoredLayers() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(LAYERS_KEY));
+      return validLayers(arr) ? arr : null;
     } catch (e) {
       return null;
     }
@@ -327,16 +422,21 @@
     }
   }
 
-  // ---- Initial state: shared link beats saved state beats default circle ----
+  // ---- Initial state: shared link beats saved state beats defaults ----
   const fromHash = location.hash.length > 1 ? decodeState(location.hash.slice(1)) : null;
-  const fromStorage = fromHash ? null : loadStoredState();
+  const storedLayers = loadStoredLayers();
+  if (storedLayers) layers = storedLayers;
   if (fromHash) {
-    applyPositions(fromHash);
-  } else if (fromStorage) {
-    applyPositions(fromStorage);
+    if (fromHash.l) layers = fromHash.l;
+    applyPositions(fromHash.p);
   } else {
-    buildGraph(DEFAULT_NODES);
-    layoutCircle();
+    const storedPositions = loadStoredPositions();
+    if (storedPositions) {
+      applyPositions(storedPositions);
+    } else {
+      buildGraph(DEFAULT_NODES);
+      layoutCircle();
+    }
   }
   redrawAll();
 
@@ -372,11 +472,11 @@
     clone.setAttribute('height', rect.height);
     clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
 
-    // The page stylesheet doesn't travel with the file: inline resolved colors
+    // The page stylesheet doesn't travel with the file: inline the styles
+    // (edge colors are already stroke attributes on the lines)
     const style = make('style', {});
     style.textContent =
-      `.edge-seq{stroke:${v('--seq')};stroke-width:1.5}` +
-      `.edge-even{stroke:${v('--even')};stroke-width:1.5}` +
+      `.edge{stroke-width:1.5}` +
       `.hit{fill:none}` +
       `.dot{fill:${v('--node-fill')};stroke:${v('--node-stroke')};stroke-width:1.5}` +
       `text{fill:${v('--label')};font-size:10px;text-anchor:middle;` +
@@ -400,10 +500,78 @@
   const settingsDialog = document.getElementById('settings');
   const nodeCountInput = document.getElementById('node-count');
   const nodeCountValue = document.getElementById('node-count-value');
+  const layersBox = document.getElementById('layers');
+  const addLayerBtn = document.getElementById('add-layer');
+  let pendingCount = 0; // node count awaiting reset confirmation
+  let workingLayers = []; // layer config being edited in the dialog
+
   nodeCountInput.addEventListener('input', () => {
     nodeCountValue.textContent = nodeCountInput.value;
   });
-  let pendingCount = 0; // node count awaiting reset confirmation
+
+  function makeSelect(options, value, className) {
+    const sel = document.createElement('select');
+    sel.className = className;
+    for (const [key, label] of options) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    }
+    sel.value = value;
+    return sel;
+  }
+
+  function renderLayerRows() {
+    layersBox.textContent = '';
+    workingLayers.forEach((layer, idx) => {
+      const row = document.createElement('div');
+      row.className = 'layer-row';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'layer-swatch';
+      swatch.style.background = PRESETS[layer.color];
+
+      const typeSel = makeSelect(
+        Object.entries(TYPES).map(([k, t]) => [k, t.label]),
+        layer.type, 'layer-type');
+      typeSel.addEventListener('change', () => { layer.type = typeSel.value; });
+
+      const colorSel = makeSelect(
+        Object.keys(PRESETS).map(k => [k, k[0].toUpperCase() + k.slice(1)]),
+        layer.color, 'layer-color');
+      colorSel.addEventListener('change', () => {
+        layer.color = colorSel.value;
+        swatch.style.background = PRESETS[layer.color];
+      });
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'layer-remove';
+      remove.textContent = '✕';
+      remove.setAttribute('aria-label', `Remove layer ${idx + 1}`);
+      remove.disabled = workingLayers.length <= 1;
+      remove.addEventListener('click', () => {
+        workingLayers.splice(idx, 1);
+        renderLayerRows();
+      });
+
+      row.appendChild(swatch);
+      row.appendChild(typeSel);
+      row.appendChild(colorSel);
+      row.appendChild(remove);
+      layersBox.appendChild(row);
+    });
+    addLayerBtn.disabled = workingLayers.length >= MAX_LAYERS;
+  }
+
+  addLayerBtn.addEventListener('click', () => {
+    if (workingLayers.length >= MAX_LAYERS) return;
+    const used = new Set(workingLayers.map(l => l.color));
+    const color = Object.keys(PRESETS).find(c => !used.has(c)) || 'gray';
+    workingLayers.push({ type: 'all', color });
+    renderLayerRows();
+  });
 
   document.getElementById('reset').addEventListener('click', () => {
     pendingCount = 0;
@@ -428,14 +596,22 @@
   document.getElementById('settings-btn').addEventListener('click', () => {
     nodeCountInput.value = N;
     nodeCountValue.textContent = N;
+    workingLayers = layers.map(l => ({ ...l }));
+    renderLayerRows();
     settingsDialog.showModal();
   });
   document.getElementById('cancel-settings').addEventListener('click', () => {
     settingsDialog.close();
   });
   document.getElementById('apply-settings').addEventListener('click', () => {
-    const raw = parseInt(nodeCountInput.value, 10);
     settingsDialog.close();
+
+    // Layer changes only redraw edges, so they apply without a reset
+    layers = workingLayers.map(l => ({ ...l }));
+    saveLayers();
+    rebuildEdges();
+
+    const raw = parseInt(nodeCountInput.value, 10);
     if (!Number.isFinite(raw)) return;
     const count = Math.max(MIN_NODES, Math.min(MAX_NODES, raw));
     if (count === N) return;
