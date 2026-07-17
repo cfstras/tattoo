@@ -83,6 +83,41 @@
     cursor: pointer;
   }
   #reset:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+  #confirm-reset {
+    background: var(--node-fill);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 320px;
+    font-family: inherit;
+  }
+  #confirm-reset::backdrop { background: rgba(0, 0, 0, 0.5); }
+  #confirm-reset h2 { margin: 0 0 8px; font-size: 16px; }
+  #confirm-reset p { margin: 0 0 16px; font-size: 13px; color: var(--hint); }
+  #confirm-reset .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  #confirm-reset button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #confirm-reset button:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+  #cancel-reset {
+    background: transparent;
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+  }
+  #do-reset {
+    background: var(--even);
+    color: #fff;
+    border: 1.5px solid var(--even);
+  }
 </style>
 </head>
 <body>
@@ -90,6 +125,14 @@
   <div id="hint">Drag the nodes — one color: 1–2–3–…, second color: even numbers</div>
   <button id="reset" type="button">Reset</button>
 </div>
+<dialog id="confirm-reset">
+  <h2>Reset the layout?</h2>
+  <p>All nodes move back to their starting positions on the circle. This can't be undone.</p>
+  <div class="actions">
+    <button id="cancel-reset" type="button">Cancel</button>
+    <button id="do-reset" type="button">Reset</button>
+  </div>
+</dialog>
 <svg id="canvas">
   <g id="edges"></g>
   <g id="nodes"></g>
@@ -181,7 +224,15 @@
   layoutCircle();
   redrawAll();
 
+  const confirmDialog = document.getElementById('confirm-reset');
   document.getElementById('reset').addEventListener('click', () => {
+    confirmDialog.showModal();
+  });
+  document.getElementById('cancel-reset').addEventListener('click', () => {
+    confirmDialog.close();
+  });
+  document.getElementById('do-reset').addEventListener('click', () => {
+    confirmDialog.close();
     layoutCircle();
     redrawAll();
   });
