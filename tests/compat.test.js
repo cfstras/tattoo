@@ -16,6 +16,12 @@
 //    where layers is 1-5 of {type, color}. Bare-array v1 hashes must
 //    keep decoding. localStorage 'node-drawing-layers-v1' holds the
 //    layers array separately; the positions key keeps the v1 format.
+//  - URL hash v3 (binary): an un-encoded version digit '3', then
+//    base64url binary: [node count u8][layer count u8][per layer:
+//    type index high nibble | color index low nibble][per node: x, y
+//    little-endian i16 fixed-point (value * 10)]. v1/v2 hashes never
+//    start with a digit and must keep decoding. Type/color index
+//    orders are frozen append-only lists in index.html.
 
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -40,6 +46,13 @@ const LEGACY_HASH_POSITIONS = [
   [10, 10], [20, 20], [30, 30], [40, 40], [50, 50],
   [60, 60], [70, 70], [80, 80], [90, 90], [100, 100],
 ];
+
+// Frozen fixture 3: a v2 share-link hash (base64 JSON {p, l}) captured
+// from the layers release — 12 nodes on a diagonal, two custom layers.
+const LEGACY_V2_HASH =
+  'eyJwIjpbWzE1LDg4NV0sWzMwLDg3MF0sWzQ1LDg1NV0sWzYwLDg0MF0sWzc1LDgyNV0sWzkwLDgxMF0sWzEwNSw3OTVdLFsxMjAsNzgwXSxbMTM1LDc2NV0sWzE1MCw3NTBdLFsxNjUsNzM1XSxbMTgwLDcyMF1dLCJsIjpbeyJ0eXBlIjoib2RkIiwiY29sb3IiOiJ0ZWFsIn0seyJ0eXBlIjoibXVsdDQiLCJjb2xvciI6Im9yYW5nZSJ9XX0=';
+const LEGACY_V2_FIRST_POSITION = [15, 885];
+const LEGACY_V2_LAYER_STROKES = { 0: '#0d9488' /* teal */, 1: '#ea580c' /* orange */ };
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -85,6 +98,27 @@ function check(name, ok, detail) {
   check('legacy hash: 10 nodes load', state.count === 10, `(got ${state.count})`);
   check('legacy hash: positions applied',
     LEGACY_HASH_POSITIONS.every((p, i) => state.transforms[i] === expectTransform(p)));
+
+  // --- Legacy v2 share-link hash loads positions AND layers ---
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(`${APP_URL}#${LEGACY_V2_HASH}`);
+  await page.reload();
+  state = await readState();
+  const v2layers = await page.evaluate(() => {
+    const layers = {};
+    for (const line of document.querySelectorAll('.edge')) {
+      const li = line.getAttribute('data-layer');
+      layers[li] = line.getAttribute('stroke');
+    }
+    return layers;
+  });
+  check('legacy v2 hash: 12 nodes load', state.count === 12, `(got ${state.count})`);
+  check('legacy v2 hash: positions applied',
+    state.transforms[0] === expectTransform(LEGACY_V2_FIRST_POSITION));
+  check('legacy v2 hash: layers applied (odd/teal, mult4/orange)',
+    v2layers['0'] === LEGACY_V2_LAYER_STROKES[0] &&
+    v2layers['1'] === LEGACY_V2_LAYER_STROKES[1],
+    JSON.stringify(v2layers));
 
   // --- Hash takes priority over stored state ---
   await page.evaluate(([key, json]) => {
@@ -141,13 +175,20 @@ function check(name, ok, detail) {
   const hashNow = await page.evaluate(() => location.hash.slice(1));
   let hashOk = false;
   try {
-    // v2 contract: object {p, l}; a bare array (v1) is also acceptable
-    const data = JSON.parse(Buffer.from(hashNow, 'base64').toString());
-    const arr = Array.isArray(data) ? data : data && data.p;
-    hashOk = Array.isArray(arr) && arr.length === 100 &&
-      arr.every(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) &&
-      (Array.isArray(data) || (Array.isArray(data.l) && data.l.length >= 1 &&
-        data.l.every(l => typeof l.type === 'string' && typeof l.color === 'string')));
+    // v3 contract: version digit '3' + base64url binary (decoded here
+    // independently of the app code)
+    if (hashNow[0] === '3') {
+      const b64 = hashNow.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+      const buf = Buffer.from(b64, 'base64');
+      const n = buf.readUInt8(0);
+      const lc = buf.readUInt8(1);
+      const posOff = 2 + lc;
+      const x0 = buf.readInt16LE(posOff) / 10;
+      const y0 = buf.readInt16LE(posOff + 2) / 10;
+      hashOk = n === 100 && lc >= 1 && lc <= 5 &&
+        buf.length === 2 + lc + 4 * n &&
+        Math.abs(x0 - 600) < 1 && Math.abs(y0 - 450) < 1; // the dragged node
+    }
   } catch (e) { /* hashOk stays false */ }
   check('current share format still matches the documented contract', hashOk);
 
