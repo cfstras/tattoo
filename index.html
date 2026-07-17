@@ -216,11 +216,20 @@
   const nodes = []; // {x, y, g}
   const edges = []; // {a, b, line}
 
+  function isPrime(n) {
+    if (n < 2) return false;
+    for (let d = 2; d * d <= n; d++) {
+      if (n % d === 0) return false;
+    }
+    return true;
+  }
+
   // Connection types: which node numbers belong to a layer's chain
   const TYPES = {
     all:   { label: 'All nodes',      member: n => true },
     even:  { label: 'Even numbers',   member: n => n % 2 === 0 },
     odd:   { label: 'Odd numbers',    member: n => n % 2 === 1 },
+    prime: { label: 'Prime numbers',  member: isPrime },
     mult3: { label: 'Multiples of 3', member: n => n % 3 === 0 },
     mult4: { label: 'Multiples of 4', member: n => n % 4 === 0 },
     mult5: { label: 'Multiples of 5', member: n => n % 5 === 0 },
@@ -243,6 +252,7 @@
   const DEFAULT_LAYERS = [
     { type: 'all', color: 'black' },
     { type: 'even', color: 'red' },
+    { type: 'prime', color: 'blue' },
   ];
   let layers = DEFAULT_LAYERS.map(l => ({ ...l }));
 
