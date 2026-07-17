@@ -209,13 +209,13 @@
 
     for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
 
-    // Sequential ring: 1-2, 2-3, ..., N-1
-    for (let i = 0; i < N; i++) addEdge(i, (i + 1) % N, 'edge-seq');
-    // Even ring in a second color: 2-4, 4-6, ... back to 2
+    // Sequential chain: 1-2, 2-3, ..., ending at N (no wrap back to 1)
+    for (let i = 0; i < N - 1; i++) addEdge(i, i + 1, 'edge-seq');
+    // Even chain in a second color: 2-4, 4-6, ... ending at the last even
     const evens = [];
     for (let i = 1; i < N; i += 2) evens.push(i);
-    for (let k = 0; k < evens.length; k++) {
-      addEdge(evens[k], evens[(k + 1) % evens.length], 'edge-even');
+    for (let k = 0; k < evens.length - 1; k++) {
+      addEdge(evens[k], evens[k + 1], 'edge-even');
     }
 
     nodes.forEach((node, i) => {
