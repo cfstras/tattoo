@@ -1,0 +1,10 @@
+{
+  "name": "tattoo",
+  "private": true,
+  "scripts": {
+    "test": "node tests/compat.test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
