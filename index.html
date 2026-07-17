@@ -2,14 +2,36 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Node Drawing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Node Drawing — 1 to 100</title>
 <style>
+  :root {
+    --bg: #1a1a2e;
+    --node-fill: #16213e;
+    --node-stroke: #e0e0e0;
+    --label: #e0e0e0;
+    --hint: #8890a8;
+    --seq: #4cc9f0;
+    --even: #f72585;
+    --grab: #ffd60a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f2f3f7;
+      --node-fill: #ffffff;
+      --node-stroke: #2b3350;
+      --label: #2b3350;
+      --hint: #6b7288;
+      --seq: #0077b6;
+      --even: #d61f69;
+      --grab: #b8860b;
+    }
+  }
   html, body {
     margin: 0;
     height: 100%;
     overflow: hidden;
-    background: #1a1a2e;
+    background: var(--bg);
     font-family: system-ui, sans-serif;
   }
   #canvas {
@@ -18,44 +40,56 @@
     display: block;
     touch-action: none;
   }
-  .edge-seq {
-    stroke: #4cc9f0;
+  .edge-seq { stroke: var(--seq); stroke-width: 1.5; }
+  .edge-even { stroke: var(--even); stroke-width: 1.5; }
+  .node .hit { fill: transparent; cursor: grab; }
+  .node .dot {
+    fill: var(--node-fill);
+    stroke: var(--node-stroke);
     stroke-width: 1.5;
+    pointer-events: none;
   }
-  .edge-even {
-    stroke: #f72585;
-    stroke-width: 1.5;
-  }
-  .node circle {
-    fill: #16213e;
-    stroke: #e0e0e0;
-    stroke-width: 1.5;
-    cursor: grab;
-  }
-  .node.dragging circle {
-    cursor: grabbing;
-    stroke: #ffd60a;
-  }
+  .node.dragging .hit { cursor: grabbing; }
+  .node.dragging .dot { stroke: var(--grab); }
   .node text {
-    fill: #e0e0e0;
+    fill: var(--label);
     font-size: 10px;
     text-anchor: middle;
     dominant-baseline: central;
     pointer-events: none;
     user-select: none;
+    -webkit-user-select: none;
   }
-  #hint {
+  #bar {
     position: fixed;
     top: 10px;
     left: 12px;
-    color: #888;
-    font-size: 13px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
     pointer-events: none;
   }
+  #hint { color: var(--hint); font-size: 13px; flex: 1; }
+  #reset {
+    pointer-events: auto;
+    background: var(--node-fill);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  #reset:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
 </style>
 </head>
 <body>
-<div id="hint">Drag the nodes — blue: 1–2–3–…, pink: even numbers</div>
+<div id="bar">
+  <div id="hint">Drag the nodes — one color: 1–2–3–…, second color: even numbers</div>
+  <button id="reset" type="button">Reset</button>
+</div>
 <svg id="canvas">
   <g id="edges"></g>
   <g id="nodes"></g>
@@ -68,7 +102,8 @@
 
   const N = 100;
   const NODE_R = 11;
-  const nodes = []; // {x, y, g, circle}
+  const HIT_R = 18; // larger invisible target for fingers
+  const nodes = []; // {x, y, g}
   const edges = []; // {a, b, line}
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -79,18 +114,18 @@
     return el;
   }
 
-  // Initial layout: numbers 1..100 arranged in a circle
-  const w = window.innerWidth, h = window.innerHeight;
-  const cx = w / 2, cy = h / 2;
-  const radius = Math.min(w, h) / 2 - 40;
-
-  for (let i = 0; i < N; i++) {
-    const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
-    nodes.push({
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    });
+  function layoutCircle() {
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const radius = Math.min(rect.width, rect.height) / 2 - 40;
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+      nodes[i].x = cx + radius * Math.cos(angle);
+      nodes[i].y = cy + radius * Math.sin(angle);
+    }
   }
+
+  for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
 
   function addEdge(a, b, cls) {
     const line = make('line', { class: cls });
@@ -103,13 +138,14 @@
   // Even ring in a second color: 2-4, 4-6, ..., 98-100, 100-2
   for (let i = 1; i < N; i += 2) addEdge(i, (i + 2) % N, 'edge-even');
 
-  // Build node elements
   nodes.forEach((node, i) => {
     const g = make('g', { class: 'node' });
-    const circle = make('circle', { r: NODE_R });
+    const hit = make('circle', { class: 'hit', r: HIT_R });
+    const dot = make('circle', { class: 'dot', r: NODE_R });
     const label = make('text', {});
     label.textContent = i + 1;
-    g.appendChild(circle);
+    g.appendChild(hit);
+    g.appendChild(dot);
     g.appendChild(label);
     g.dataset.index = i;
     nodesLayer.appendChild(g);
@@ -141,9 +177,16 @@
       e.line.setAttribute('y2', nodes[e.b].y);
     }
   }
+
+  layoutCircle();
   redrawAll();
 
-  // Dragging via pointer events
+  document.getElementById('reset').addEventListener('click', () => {
+    layoutCircle();
+    redrawAll();
+  });
+
+  // Dragging via pointer events (mouse + touch)
   let dragIndex = -1;
   let offsetX = 0, offsetY = 0;
 
