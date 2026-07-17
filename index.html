@@ -374,17 +374,88 @@
     arr.forEach((p, i) => { nodes[i].x = p[0]; nodes[i].y = p[1]; });
   }
 
-  // Share format v2: base64 JSON object {p: positions, l: layers}.
-  // v1 (a bare positions array) must keep decoding forever.
+  // Share format v3: an un-encoded version digit, then base64url binary:
+  //   byte 0: node count, byte 1: layer count L,
+  //   L bytes: type index (high nibble) | color index (low nibble),
+  //   then per node: x, y as little-endian int16 fixed-point (value * 10).
+  // Legacy v1 (base64 JSON positions array) and v2 (base64 JSON {p, l})
+  // never start with a digit ("[[" -> "W1s", "{\"p\"" -> "eyJ") and must
+  // keep decoding forever.
+  // Frozen index orders — append only, never reorder or remove:
+  const TYPE_IDS = ['all', 'even', 'odd', 'prime', 'mult3', 'mult4', 'mult5'];
+  const COLOR_IDS = ['black', 'red', 'blue', 'green', 'orange',
+    'purple', 'teal', 'pink', 'yellow', 'gray'];
+
+  function bytesToB64url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function b64urlToBytes(str) {
+    let s = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
   function encodeState() {
-    return btoa(JSON.stringify({ p: statePositions(), l: layers }));
+    const dv = new DataView(new ArrayBuffer(2 + layers.length + 4 * N));
+    dv.setUint8(0, N);
+    dv.setUint8(1, layers.length);
+    layers.forEach((l, i) => {
+      dv.setUint8(2 + i, (TYPE_IDS.indexOf(l.type) << 4) | COLOR_IDS.indexOf(l.color));
+    });
+    const fixed = v => Math.max(-32768, Math.min(32767, Math.round(v * 10)));
+    let o = 2 + layers.length;
+    for (const n of nodes) {
+      dv.setInt16(o, fixed(n.x), true);
+      dv.setInt16(o + 2, fixed(n.y), true);
+      o += 4;
+    }
+    return '3' + bytesToB64url(new Uint8Array(dv.buffer));
+  }
+
+  function decodeV3(str) {
+    try {
+      const bytes = b64urlToBytes(str);
+      if (bytes.length < 3) return null;
+      const dv = new DataView(bytes.buffer);
+      const n = dv.getUint8(0);
+      const lc = dv.getUint8(1);
+      if (n < MIN_NODES || n > MAX_NODES || lc < 1 || lc > MAX_LAYERS) return null;
+      if (bytes.length !== 2 + lc + 4 * n) return null;
+      const l = [];
+      for (let i = 0; i < lc; i++) {
+        const b = dv.getUint8(2 + i);
+        const type = TYPE_IDS[b >> 4], color = COLOR_IDS[b & 15];
+        if (!type || !color) return null;
+        l.push({ type, color });
+      }
+      const p = [];
+      let o = 2 + lc;
+      for (let i = 0; i < n; i++) {
+        p.push([dv.getInt16(o, true) / 10, dv.getInt16(o + 2, true) / 10]);
+        o += 4;
+      }
+      return { p, l };
+    } catch (e) {
+      return null;
+    }
   }
 
   function decodeState(str) {
+    if (/^[0-9]/.test(str)) {
+      if (str[0] === '3') return decodeV3(str.slice(1));
+      return null; // a future version this build doesn't understand
+    }
+    // legacy base64-JSON formats
     try {
       const data = JSON.parse(atob(str));
-      if (validPositions(data)) return { p: data, l: null }; // legacy v1
-      if (data && validPositions(data.p)) {
+      if (validPositions(data)) return { p: data, l: null }; // v1
+      if (data && validPositions(data.p)) { // v2
         return { p: data.p, l: validLayers(data.l) ? data.l : null };
       }
       return null;
