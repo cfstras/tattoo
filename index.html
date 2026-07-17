@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Node Drawing</title>
+<style>
+  :root {
+    --bg: #f2f3f7;
+    --node-fill: #ffffff;
+    --node-stroke: #2b3350;
+    --label: #2b3350;
+    --hint: #6b7288;
+    --accent: #0077b6;
+    --danger: #d61f69;
+    --grab: #b8860b;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: system-ui, sans-serif;
+  }
+  #canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+  .edge { stroke-width: 1.5; }
+  .node .hit { fill: transparent; cursor: grab; }
+  .node .dot {
+    fill: var(--node-fill);
+    stroke: var(--node-stroke);
+    stroke-width: 1.5;
+    pointer-events: none;
+  }
+  .node.dragging .hit { cursor: grabbing; }
+  .node.dragging .dot { stroke: var(--grab); }
+  .node text {
+    fill: var(--label);
+    font-size: 10px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #bar {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .btn {
+    pointer-events: auto;
+    background: var(--node-fill);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  dialog {
+    background: var(--node-fill);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 10px;
+    padding: 20px;
+    width: min(360px, 90vw);
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  dialog h2 { margin: 0 0 8px; font-size: 16px; }
+  dialog h3 { margin: 16px 0 8px; font-size: 13px; }
+  dialog p { margin: 0 0 12px; font-size: 13px; color: var(--hint); }
+  dialog label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    margin: 0 0 12px;
+  }
+  dialog output {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  dialog input[type="range"] {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    accent-color: var(--accent);
+  }
+  dialog select {
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 6px;
+    background: var(--bg);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 6px;
+    min-width: 0;
+  }
+  #layers {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .layer-row select { flex: 1; }
+  .layer-swatch {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+  .layer-remove {
+    flex: none;
+    padding: 4px 9px;
+    line-height: 1;
+  }
+  #add-layer { margin: 0 0 4px; }
+  dialog .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  dialog button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+  }
+  dialog button:disabled { opacity: 0.4; cursor: default; }
+  dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #do-reset {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+  #apply-settings {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="share" class="btn" type="button">Share</button>
+  <button id="download" class="btn" type="button">Download SVG</button>
+  <button id="settings-btn" class="btn" type="button">Settings</button>
+  <button id="reset" class="btn" type="button">Reset</button>
+</div>
+<dialog id="confirm-reset">
+  <h2>Reset the layout?</h2>
+  <p>All nodes move back to their starting positions on the circle. This can't be undone.</p>
+  <div class="actions">
+    <button id="cancel-reset" type="button">Cancel</button>
+    <button id="do-reset" type="button">Reset</button>
+  </div>
+</dialog>
+<dialog id="settings">
+  <h2>Settings</h2>
+  <label for="node-count">Number of nodes
+    <output id="node-count-value">100</output>
+  </label>
+  <input type="range" id="node-count" min="10" max="200" step="1">
+  <p>Changing the count resets the layout.</p>
+  <h3>Layers</h3>
+  <div id="layers"></div>
+  <button id="add-layer" type="button">Add layer</button>
+  <div class="actions">
+    <button id="cancel-settings" type="button">Cancel</button>
+    <button id="apply-settings" type="button">Apply</button>
+  </div>
+</dialog>
+<svg id="canvas">
+  <g id="edges"></g>
+  <g id="nodes"></g>
+</svg>
+<script>
+(function () {
+  const svg = document.getElementById('canvas');
+  const edgesLayer = document.getElementById('edges');
+  const nodesLayer = document.getElementById('nodes');
+
+  const NODE_R = 11;
+  const HIT_R = 18; // larger invisible target for fingers
+  const MIN_NODES = 10, MAX_NODES = 200, DEFAULT_NODES = 100;
+  const MAX_LAYERS = 5;
+  let N = DEFAULT_NODES;
+  const nodes = []; // {x, y, g}
+  const edges = []; // {a, b, line}
+
+  function isPrime(n) {
+    if (n < 2) return false;
+    for (let d = 2; d * d <= n; d++) {
+      if (n % d === 0) return false;
+    }
+    return true;
+  }
+
+  // Connection types: which node numbers belong to a layer's chain
+  const TYPES = {
+    all:   { label: 'All nodes',      member: n => true },
+    even:  { label: 'Even numbers',   member: n => n % 2 === 0 },
+    odd:   { label: 'Odd numbers',    member: n => n % 2 === 1 },
+    prime: { label: 'Prime numbers',  member: isPrime },
+    mult3: { label: 'Multiples of 3', member: n => n % 3 === 0 },
+    mult4: { label: 'Multiples of 4', member: n => n % 4 === 0 },
+    mult5: { label: 'Multiples of 5', member: n => n % 5 === 0 },
+  };
+
+  // 10 color presets
+  const PRESETS = {
+    black:  '#000000',
+    red:    '#dc2626',
+    blue:   '#2563eb',
+    green:  '#16a34a',
+    orange: '#ea580c',
+    purple: '#7c3aed',
+    teal:   '#0d9488',
+    pink:   '#db2777',
+    yellow: '#eab308',
+    gray:   '#6b7280',
+  };
+
+  const DEFAULT_LAYERS = [
+    { type: 'all', color: 'black' },
+    { type: 'even', color: 'red' },
+    { type: 'prime', color: 'blue' },
+  ];
+  let layers = DEFAULT_LAYERS.map(l => ({ ...l }));
+
+  function validLayers(arr) {
+    return Array.isArray(arr) &&
+      arr.length >= 1 && arr.length <= MAX_LAYERS &&
+      arr.every(l => l && typeof l === 'object' &&
+        Object.prototype.hasOwnProperty.call(TYPES, l.type) &&
+        Object.prototype.hasOwnProperty.call(PRESETS, l.color));
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  function make(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function rebuildEdges() {
+    edges.length = 0;
+    edgesLayer.textContent = '';
+    layers.forEach((layer, li) => {
+      const members = [];
+      for (let i = 0; i < N; i++) {
+        if (TYPES[layer.type].member(i + 1)) members.push(i);
+      }
+      // open chain: consecutive members, no wrap from last back to first
+      for (let k = 0; k < members.length - 1; k++) {
+        const line = make('line', {
+          class: 'edge',
+          stroke: PRESETS[layer.color],
+          'data-layer': li,
+        });
+        edgesLayer.appendChild(line);
+        edges.push({ a: members[k], b: members[k + 1], line });
+      }
+    });
+    for (const e of edges) {
+      e.line.setAttribute('x1', nodes[e.a].x);
+      e.line.setAttribute('y1', nodes[e.a].y);
+      e.line.setAttribute('x2', nodes[e.b].x);
+      e.line.setAttribute('y2', nodes[e.b].y);
+    }
+  }
+
+  function buildGraph(n) {
+    N = n;
+    nodes.length = 0;
+    nodesLayer.textContent = '';
+
+    for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
+
+    nodes.forEach((node, i) => {
+      const g = make('g', { class: 'node' });
+      const hit = make('circle', { class: 'hit', r: HIT_R });
+      const dot = make('circle', { class: 'dot', r: NODE_R });
+      const label = make('text', {});
+      label.textContent = i + 1;
+      g.appendChild(hit);
+      g.appendChild(dot);
+      g.appendChild(label);
+      g.dataset.index = i;
+      nodesLayer.appendChild(g);
+      node.g = g;
+    });
+  }
+
+  function layoutCircle() {
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const radius = Math.min(rect.width, rect.height) / 2 - 40;
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+      nodes[i].x = cx + radius * Math.cos(angle);
+      nodes[i].y = cy + radius * Math.sin(angle);
+    }
+  }
+
+  function updateNode(i) {
+    const n = nodes[i];
+    n.g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+  }
+
+  function updateEdgesFor(i) {
+    for (const e of edges) {
+      if (e.a === i || e.b === i) {
+        e.line.setAttribute('x1', nodes[e.a].x);
+        e.line.setAttribute('y1', nodes[e.a].y);
+        e.line.setAttribute('x2', nodes[e.b].x);
+        e.line.setAttribute('y2', nodes[e.b].y);
+      }
+    }
+  }
+
+  function redrawAll() {
+    for (let i = 0; i < N; i++) updateNode(i);
+    rebuildEdges();
+  }
+
+  // ---- State serialization (localStorage and share links) ----
+  function statePositions() {
+    return nodes.map(n => [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10]);
+  }
+
+  function validPositions(arr) {
+    return Array.isArray(arr) &&
+      arr.length >= MIN_NODES && arr.length <= MAX_NODES &&
+      arr.every(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  }
+
+  function applyPositions(arr) {
+    buildGraph(arr.length);
+    arr.forEach((p, i) => { nodes[i].x = p[0]; nodes[i].y = p[1]; });
+  }
+
+  // Share format v2: base64 JSON object {p: positions, l: layers}.
+  // v1 (a bare positions array) must keep decoding forever.
+  function encodeState() {
+    return btoa(JSON.stringify({ p: statePositions(), l: layers }));
+  }
+
+  function decodeState(str) {
+    try {
+      const data = JSON.parse(atob(str));
+      if (validPositions(data)) return { p: data, l: null }; // legacy v1
+      if (data && validPositions(data.p)) {
+        return { p: data.p, l: validLayers(data.l) ? data.l : null };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---- Persistence ----
+  const STORAGE_KEY = 'node-drawing-positions-v1';
+  const LAYERS_KEY = 'node-drawing-layers-v1';
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(statePositions()));
+    } catch (e) { /* storage unavailable (private mode, quota) — skip */ }
+  }
+
+  function saveLayers() {
+    try {
+      localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
+    } catch (e) { /* ignore */ }
+  }
+
+  function clearSavedState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function loadStoredPositions() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return validPositions(arr) ? arr : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function loadStoredLayers() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(LAYERS_KEY));
+      return validLayers(arr) ? arr : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearHash() {
+    if (location.hash) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+
+  // ---- Initial state: shared link beats saved state beats defaults ----
+  const fromHash = location.hash.length > 1 ? decodeState(location.hash.slice(1)) : null;
+  const storedLayers = loadStoredLayers();
+  if (storedLayers) layers = storedLayers;
+  if (fromHash) {
+    if (fromHash.l) layers = fromHash.l;
+    applyPositions(fromHash.p);
+  } else {
+    const storedPositions = loadStoredPositions();
+    if (storedPositions) {
+      applyPositions(storedPositions);
+    } else {
+      buildGraph(DEFAULT_NODES);
+      layoutCircle();
+    }
+  }
+  redrawAll();
+
+  // ---- Top bar buttons ----
+  function flashLabel(btn, text) {
+    const original = btn.dataset.label || (btn.dataset.label = btn.textContent);
+    btn.textContent = text;
+    clearTimeout(btn._flashTimer);
+    btn._flashTimer = setTimeout(() => { btn.textContent = original; }, 1500);
+  }
+
+  const shareBtn = document.getElementById('share');
+  shareBtn.addEventListener('click', () => {
+    location.hash = encodeState();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(location.href)
+        .then(() => flashLabel(shareBtn, 'Link copied!'))
+        .catch(() => flashLabel(shareBtn, 'Link in URL bar'));
+    } else {
+      flashLabel(shareBtn, 'Link in URL bar');
+    }
+  });
+
+  document.getElementById('download').addEventListener('click', () => {
+    const rect = svg.getBoundingClientRect();
+    const css = getComputedStyle(document.documentElement);
+    const v = name => css.getPropertyValue(name).trim();
+
+    const clone = svg.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.setAttribute('xmlns', SVGNS);
+    clone.setAttribute('width', rect.width);
+    clone.setAttribute('height', rect.height);
+    clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+
+    // The page stylesheet doesn't travel with the file: inline the styles
+    // (edge colors are already stroke attributes on the lines)
+    const style = make('style', {});
+    style.textContent =
+      `.edge{stroke-width:1.5}` +
+      `.hit{fill:none}` +
+      `.dot{fill:${v('--node-fill')};stroke:${v('--node-stroke')};stroke-width:1.5}` +
+      `text{fill:${v('--label')};font-size:10px;text-anchor:middle;` +
+      `dominant-baseline:central;font-family:system-ui,sans-serif}`;
+    const bg = make('rect', { width: rect.width, height: rect.height, fill: v('--bg') });
+    clone.insertBefore(bg, clone.firstChild);
+    clone.insertBefore(style, clone.firstChild);
+
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)],
+      { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'node-drawing.svg';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  // ---- Reset (with confirmation) and settings ----
+  const confirmDialog = document.getElementById('confirm-reset');
+  const settingsDialog = document.getElementById('settings');
+  const nodeCountInput = document.getElementById('node-count');
+  const nodeCountValue = document.getElementById('node-count-value');
+  const layersBox = document.getElementById('layers');
+  const addLayerBtn = document.getElementById('add-layer');
+  let pendingCount = 0; // node count awaiting reset confirmation
+  let workingLayers = []; // layer config being edited in the dialog
+
+  nodeCountInput.addEventListener('input', () => {
+    nodeCountValue.textContent = nodeCountInput.value;
+  });
+
+  function makeSelect(options, value, className) {
+    const sel = document.createElement('select');
+    sel.className = className;
+    for (const [key, label] of options) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    }
+    sel.value = value;
+    return sel;
+  }
+
+  function renderLayerRows() {
+    layersBox.textContent = '';
+    workingLayers.forEach((layer, idx) => {
+      const row = document.createElement('div');
+      row.className = 'layer-row';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'layer-swatch';
+      swatch.style.background = PRESETS[layer.color];
+
+      const typeSel = makeSelect(
+        Object.entries(TYPES).map(([k, t]) => [k, t.label]),
+        layer.type, 'layer-type');
+      typeSel.addEventListener('change', () => { layer.type = typeSel.value; });
+
+      const colorSel = makeSelect(
+        Object.keys(PRESETS).map(k => [k, k[0].toUpperCase() + k.slice(1)]),
+        layer.color, 'layer-color');
+      colorSel.addEventListener('change', () => {
+        layer.color = colorSel.value;
+        swatch.style.background = PRESETS[layer.color];
+      });
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'layer-remove';
+      remove.textContent = '✕';
+      remove.setAttribute('aria-label', `Remove layer ${idx + 1}`);
+      remove.disabled = workingLayers.length <= 1;
+      remove.addEventListener('click', () => {
+        workingLayers.splice(idx, 1);
+        renderLayerRows();
+      });
+
+      row.appendChild(swatch);
+      row.appendChild(typeSel);
+      row.appendChild(colorSel);
+      row.appendChild(remove);
+      layersBox.appendChild(row);
+    });
+    addLayerBtn.disabled = workingLayers.length >= MAX_LAYERS;
+  }
+
+  addLayerBtn.addEventListener('click', () => {
+    if (workingLayers.length >= MAX_LAYERS) return;
+    const used = new Set(workingLayers.map(l => l.color));
+    const color = Object.keys(PRESETS).find(c => !used.has(c)) || 'gray';
+    workingLayers.push({ type: 'all', color });
+    renderLayerRows();
+  });
+
+  document.getElementById('reset').addEventListener('click', () => {
+    pendingCount = 0;
+    confirmDialog.showModal();
+  });
+  document.getElementById('cancel-reset').addEventListener('click', () => {
+    pendingCount = 0;
+    confirmDialog.close();
+  });
+  document.getElementById('do-reset').addEventListener('click', () => {
+    confirmDialog.close();
+    clearSavedState();
+    clearHash();
+    if (pendingCount) {
+      buildGraph(pendingCount);
+      pendingCount = 0;
+    }
+    layoutCircle();
+    redrawAll();
+  });
+
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    nodeCountInput.value = N;
+    nodeCountValue.textContent = N;
+    workingLayers = layers.map(l => ({ ...l }));
+    renderLayerRows();
+    settingsDialog.showModal();
+  });
+  document.getElementById('cancel-settings').addEventListener('click', () => {
+    settingsDialog.close();
+  });
+  document.getElementById('apply-settings').addEventListener('click', () => {
+    settingsDialog.close();
+
+    // Layer changes only redraw edges, so they apply without a reset
+    layers = workingLayers.map(l => ({ ...l }));
+    saveLayers();
+    rebuildEdges();
+
+    const raw = parseInt(nodeCountInput.value, 10);
+    if (!Number.isFinite(raw)) return;
+    const count = Math.max(MIN_NODES, Math.min(MAX_NODES, raw));
+    if (count === N) return;
+    pendingCount = count;
+    confirmDialog.showModal();
+  });
+
+  // ---- Dragging via pointer events (mouse + touch) ----
+  let dragIndex = -1;
+  let offsetX = 0, offsetY = 0;
+
+  function svgPoint(evt) {
+    const rect = svg.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+
+  svg.addEventListener('pointerdown', (evt) => {
+    const g = evt.target.closest('.node');
+    if (!g) return;
+    dragIndex = +g.dataset.index;
+    const p = svgPoint(evt);
+    offsetX = nodes[dragIndex].x - p.x;
+    offsetY = nodes[dragIndex].y - p.y;
+    g.classList.add('dragging');
+    nodesLayer.appendChild(g); // raise to top
+    svg.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+  });
+
+  svg.addEventListener('pointermove', (evt) => {
+    if (dragIndex < 0) return;
+    const p = svgPoint(evt);
+    nodes[dragIndex].x = p.x + offsetX;
+    nodes[dragIndex].y = p.y + offsetY;
+    updateNode(dragIndex);
+    updateEdgesFor(dragIndex);
+  });
+
+  function endDrag() {
+    if (dragIndex < 0) return;
+    nodes[dragIndex].g.classList.remove('dragging');
+    dragIndex = -1;
+    saveState();
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+})();
+</script>
+</body>
+</html>
