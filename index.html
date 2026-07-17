@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node Drawing</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: system-ui, sans-serif;
+  }
+  #canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+  .edge-seq {
+    stroke: #4cc9f0;
+    stroke-width: 1.5;
+  }
+  .edge-even {
+    stroke: #f72585;
+    stroke-width: 1.5;
+  }
+  .node circle {
+    fill: #16213e;
+    stroke: #e0e0e0;
+    stroke-width: 1.5;
+    cursor: grab;
+  }
+  .node.dragging circle {
+    cursor: grabbing;
+    stroke: #ffd60a;
+  }
+  .node text {
+    fill: #e0e0e0;
+    font-size: 10px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    user-select: none;
+  }
+  #hint {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    color: #888;
+    font-size: 13px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="hint">Drag the nodes — blue: 1–2–3–…, pink: even numbers</div>
+<svg id="canvas">
+  <g id="edges"></g>
+  <g id="nodes"></g>
+</svg>
+<script>
+(function () {
+  const svg = document.getElementById('canvas');
+  const edgesLayer = document.getElementById('edges');
+  const nodesLayer = document.getElementById('nodes');
+
+  const N = 100;
+  const NODE_R = 11;
+  const nodes = []; // {x, y, g, circle}
+  const edges = []; // {a, b, line}
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  function make(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  // Initial layout: numbers 1..100 arranged in a circle
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+  const radius = Math.min(w, h) / 2 - 40;
+
+  for (let i = 0; i < N; i++) {
+    const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+    nodes.push({
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    });
+  }
+
+  function addEdge(a, b, cls) {
+    const line = make('line', { class: cls });
+    edgesLayer.appendChild(line);
+    edges.push({ a, b, line });
+  }
+
+  // Sequential ring: 1-2, 2-3, ..., 99-100, 100-1
+  for (let i = 0; i < N; i++) addEdge(i, (i + 1) % N, 'edge-seq');
+  // Even ring in a second color: 2-4, 4-6, ..., 98-100, 100-2
+  for (let i = 1; i < N; i += 2) addEdge(i, (i + 2) % N, 'edge-even');
+
+  // Build node elements
+  nodes.forEach((node, i) => {
+    const g = make('g', { class: 'node' });
+    const circle = make('circle', { r: NODE_R });
+    const label = make('text', {});
+    label.textContent = i + 1;
+    g.appendChild(circle);
+    g.appendChild(label);
+    g.dataset.index = i;
+    nodesLayer.appendChild(g);
+    node.g = g;
+  });
+
+  function updateNode(i) {
+    const n = nodes[i];
+    n.g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+  }
+
+  function updateEdgesFor(i) {
+    for (const e of edges) {
+      if (e.a === i || e.b === i) {
+        e.line.setAttribute('x1', nodes[e.a].x);
+        e.line.setAttribute('y1', nodes[e.a].y);
+        e.line.setAttribute('x2', nodes[e.b].x);
+        e.line.setAttribute('y2', nodes[e.b].y);
+      }
+    }
+  }
+
+  function redrawAll() {
+    for (let i = 0; i < N; i++) updateNode(i);
+    for (const e of edges) {
+      e.line.setAttribute('x1', nodes[e.a].x);
+      e.line.setAttribute('y1', nodes[e.a].y);
+      e.line.setAttribute('x2', nodes[e.b].x);
+      e.line.setAttribute('y2', nodes[e.b].y);
+    }
+  }
+  redrawAll();
+
+  // Dragging via pointer events
+  let dragIndex = -1;
+  let offsetX = 0, offsetY = 0;
+
+  function svgPoint(evt) {
+    const rect = svg.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+
+  svg.addEventListener('pointerdown', (evt) => {
+    const g = evt.target.closest('.node');
+    if (!g) return;
+    dragIndex = +g.dataset.index;
+    const p = svgPoint(evt);
+    offsetX = nodes[dragIndex].x - p.x;
+    offsetY = nodes[dragIndex].y - p.y;
+    g.classList.add('dragging');
+    nodesLayer.appendChild(g); // raise to top
+    svg.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+  });
+
+  svg.addEventListener('pointermove', (evt) => {
+    if (dragIndex < 0) return;
+    const p = svgPoint(evt);
+    nodes[dragIndex].x = p.x + offsetX;
+    nodes[dragIndex].y = p.y + offsetY;
+    updateNode(dragIndex);
+    updateEdgesFor(dragIndex);
+  });
+
+  function endDrag() {
+    if (dragIndex < 0) return;
+    nodes[dragIndex].g.classList.remove('dragging');
+    dragIndex = -1;
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+})();
+</script>
+</body>
+</html>
