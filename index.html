@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Node Drawing — 1 to 100</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --node-fill: #16213e;
+    --node-stroke: #e0e0e0;
+    --label: #e0e0e0;
+    --hint: #8890a8;
+    --seq: #4cc9f0;
+    --even: #f72585;
+    --grab: #ffd60a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f2f3f7;
+      --node-fill: #ffffff;
+      --node-stroke: #2b3350;
+      --label: #2b3350;
+      --hint: #6b7288;
+      --seq: #0077b6;
+      --even: #d61f69;
+      --grab: #b8860b;
+    }
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: system-ui, sans-serif;
+  }
+  #canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+  .edge-seq { stroke: var(--seq); stroke-width: 1.5; }
+  .edge-even { stroke: var(--even); stroke-width: 1.5; }
+  .node .hit { fill: transparent; cursor: grab; }
+  .node .dot {
+    fill: var(--node-fill);
+    stroke: var(--node-stroke);
+    stroke-width: 1.5;
+    pointer-events: none;
+  }
+  .node.dragging .hit { cursor: grabbing; }
+  .node.dragging .dot { stroke: var(--grab); }
+  .node text {
+    fill: var(--label);
+    font-size: 10px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #bar {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+  #hint { color: var(--hint); font-size: 13px; flex: 1; }
+  #reset {
+    pointer-events: auto;
+    background: var(--node-fill);
+    color: var(--label);
+    border: 1.5px solid var(--node-stroke);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  #reset:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <div id="hint">Drag the nodes — one color: 1–2–3–…, second color: even numbers</div>
+  <button id="reset" type="button">Reset</button>
+</div>
+<svg id="canvas">
+  <g id="edges"></g>
+  <g id="nodes"></g>
+</svg>
+<script>
+(function () {
+  const svg = document.getElementById('canvas');
+  const edgesLayer = document.getElementById('edges');
+  const nodesLayer = document.getElementById('nodes');
+
+  const N = 100;
+  const NODE_R = 11;
+  const HIT_R = 18; // larger invisible target for fingers
+  const nodes = []; // {x, y, g}
+  const edges = []; // {a, b, line}
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  function make(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function layoutCircle() {
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const radius = Math.min(rect.width, rect.height) / 2 - 40;
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+      nodes[i].x = cx + radius * Math.cos(angle);
+      nodes[i].y = cy + radius * Math.sin(angle);
+    }
+  }
+
+  for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
+
+  function addEdge(a, b, cls) {
+    const line = make('line', { class: cls });
+    edgesLayer.appendChild(line);
+    edges.push({ a, b, line });
+  }
+
+  // Sequential ring: 1-2, 2-3, ..., 99-100, 100-1
+  for (let i = 0; i < N; i++) addEdge(i, (i + 1) % N, 'edge-seq');
+  // Even ring in a second color: 2-4, 4-6, ..., 98-100, 100-2
+  for (let i = 1; i < N; i += 2) addEdge(i, (i + 2) % N, 'edge-even');
+
+  nodes.forEach((node, i) => {
+    const g = make('g', { class: 'node' });
+    const hit = make('circle', { class: 'hit', r: HIT_R });
+    const dot = make('circle', { class: 'dot', r: NODE_R });
+    const label = make('text', {});
+    label.textContent = i + 1;
+    g.appendChild(hit);
+    g.appendChild(dot);
+    g.appendChild(label);
+    g.dataset.index = i;
+    nodesLayer.appendChild(g);
+    node.g = g;
+  });
+
+  function updateNode(i) {
+    const n = nodes[i];
+    n.g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+  }
+
+  function updateEdgesFor(i) {
+    for (const e of edges) {
+      if (e.a === i || e.b === i) {
+        e.line.setAttribute('x1', nodes[e.a].x);
+        e.line.setAttribute('y1', nodes[e.a].y);
+        e.line.setAttribute('x2', nodes[e.b].x);
+        e.line.setAttribute('y2', nodes[e.b].y);
+      }
+    }
+  }
+
+  function redrawAll() {
+    for (let i = 0; i < N; i++) updateNode(i);
+    for (const e of edges) {
+      e.line.setAttribute('x1', nodes[e.a].x);
+      e.line.setAttribute('y1', nodes[e.a].y);
+      e.line.setAttribute('x2', nodes[e.b].x);
+      e.line.setAttribute('y2', nodes[e.b].y);
+    }
+  }
+
+  layoutCircle();
+  redrawAll();
+
+  document.getElementById('reset').addEventListener('click', () => {
+    layoutCircle();
+    redrawAll();
+  });
+
+  // Dragging via pointer events (mouse + touch)
+  let dragIndex = -1;
+  let offsetX = 0, offsetY = 0;
+
+  function svgPoint(evt) {
+    const rect = svg.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+
+  svg.addEventListener('pointerdown', (evt) => {
+    const g = evt.target.closest('.node');
+    if (!g) return;
+    dragIndex = +g.dataset.index;
+    const p = svgPoint(evt);
+    offsetX = nodes[dragIndex].x - p.x;
+    offsetY = nodes[dragIndex].y - p.y;
+    g.classList.add('dragging');
+    nodesLayer.appendChild(g); // raise to top
+    svg.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+  });
+
+  svg.addEventListener('pointermove', (evt) => {
+    if (dragIndex < 0) return;
+    const p = svgPoint(evt);
+    nodes[dragIndex].x = p.x + offsetX;
+    nodes[dragIndex].y = p.y + offsetY;
+    updateNode(dragIndex);
+    updateEdgesFor(dragIndex);
+  });
+
+  function endDrag() {
+    if (dragIndex < 0) return;
+    nodes[dragIndex].g.classList.remove('dragging');
+    dragIndex = -1;
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+})();
+</script>
+</body>
+</html>
