@@ -299,10 +299,8 @@
     }
   }
 
-  // ---- Persist node positions after 10s without dragging ----
+  // ---- Persist node positions whenever a drag finishes ----
   const STORAGE_KEY = 'node-drawing-positions-v1';
-  const SAVE_DELAY_MS = 10000;
-  let saveTimer = null;
 
   function saveState() {
     try {
@@ -311,13 +309,7 @@
   }
 
   function clearSavedState() {
-    clearTimeout(saveTimer);
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
-  }
-
-  function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveState, SAVE_DELAY_MS);
   }
 
   function loadStoredState() {
@@ -465,7 +457,6 @@
     g.classList.add('dragging');
     nodesLayer.appendChild(g); // raise to top
     svg.setPointerCapture(evt.pointerId);
-    clearTimeout(saveTimer); // don't save mid-drag
     evt.preventDefault();
   });
 
@@ -482,7 +473,7 @@
     if (dragIndex < 0) return;
     nodes[dragIndex].g.classList.remove('dragging');
     dragIndex = -1;
-    scheduleSave();
+    saveState();
   }
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
