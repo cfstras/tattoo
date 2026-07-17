@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Node Drawing — 1 to 100</title>
+<title>Node Drawing</title>
 <style>
   :root {
     --bg: #1a1a2e;
@@ -67,11 +67,11 @@
     right: 12px;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
     pointer-events: none;
   }
-  #hint { color: var(--hint); font-size: 13px; flex: 1; min-width: 200px; }
   .btn {
     pointer-events: auto;
     background: var(--node-fill);
@@ -104,15 +104,15 @@
     font-size: 13px;
     margin: 0 0 12px;
   }
-  dialog input[type="number"] {
-    width: 80px;
-    font: inherit;
-    font-size: 13px;
-    padding: 4px 8px;
-    background: var(--bg);
-    color: var(--label);
-    border: 1.5px solid var(--node-stroke);
-    border-radius: 6px;
+  dialog output {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  dialog input[type="range"] {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    accent-color: var(--seq);
   }
   dialog .actions {
     display: flex;
@@ -144,7 +144,6 @@
 </head>
 <body>
 <div id="bar">
-  <div id="hint">Drag the nodes — one color: 1–2–3–…, second color: even numbers</div>
   <button id="share" class="btn" type="button">Share</button>
   <button id="download" class="btn" type="button">Download SVG</button>
   <button id="settings-btn" class="btn" type="button">Settings</button>
@@ -160,9 +159,10 @@
 </dialog>
 <dialog id="settings">
   <h2>Settings</h2>
-  <label>Number of nodes
-    <input type="number" id="node-count" min="10" max="200" step="1">
+  <label for="node-count">Number of nodes
+    <output id="node-count-value">100</output>
   </label>
+  <input type="range" id="node-count" min="10" max="200" step="1">
   <p>Changing the count resets the layout.</p>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
@@ -399,6 +399,10 @@
   const confirmDialog = document.getElementById('confirm-reset');
   const settingsDialog = document.getElementById('settings');
   const nodeCountInput = document.getElementById('node-count');
+  const nodeCountValue = document.getElementById('node-count-value');
+  nodeCountInput.addEventListener('input', () => {
+    nodeCountValue.textContent = nodeCountInput.value;
+  });
   let pendingCount = 0; // node count awaiting reset confirmation
 
   document.getElementById('reset').addEventListener('click', () => {
@@ -423,6 +427,7 @@
 
   document.getElementById('settings-btn').addEventListener('click', () => {
     nodeCountInput.value = N;
+    nodeCountValue.textContent = N;
     settingsDialog.showModal();
   });
   document.getElementById('cancel-settings').addEventListener('click', () => {
