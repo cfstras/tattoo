@@ -221,7 +221,41 @@
     }
   }
 
-  layoutCircle();
+  // Persist node positions after 10s without dragging
+  const STORAGE_KEY = 'node-drawing-positions-v1';
+  const SAVE_DELAY_MS = 10000;
+  let saveTimer = null;
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY,
+        JSON.stringify(nodes.map(n => [n.x, n.y])));
+    } catch (e) { /* storage unavailable (private mode, quota) — skip */ }
+  }
+
+  function clearSavedState() {
+    clearTimeout(saveTimer);
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveState, SAVE_DELAY_MS);
+  }
+
+  function loadState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!Array.isArray(saved) || saved.length !== N) return false;
+      if (!saved.every(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))) return false;
+      saved.forEach((p, i) => { nodes[i].x = p[0]; nodes[i].y = p[1]; });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (!loadState()) layoutCircle();
   redrawAll();
 
   const confirmDialog = document.getElementById('confirm-reset');
@@ -233,6 +267,7 @@
   });
   document.getElementById('do-reset').addEventListener('click', () => {
     confirmDialog.close();
+    clearSavedState();
     layoutCircle();
     redrawAll();
   });
@@ -256,6 +291,7 @@
     g.classList.add('dragging');
     nodesLayer.appendChild(g); // raise to top
     svg.setPointerCapture(evt.pointerId);
+    clearTimeout(saveTimer); // don't save mid-drag
     evt.preventDefault();
   });
 
@@ -272,6 +308,7 @@
     if (dragIndex < 0) return;
     nodes[dragIndex].g.classList.remove('dragging');
     dragIndex = -1;
+    scheduleSave();
   }
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
