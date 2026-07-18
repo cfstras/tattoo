@@ -1315,6 +1315,8 @@
     redrawAll();
     approx.running = true;
     approx.paused = false;
+    setSpeed('slow'); // every run starts visible; a leftover 'max' from
+    // the previous run would otherwise finish in a blink
     approxPauseBtn.textContent = 'Pause';
     approxBar.hidden = false;
     window.__approxTrackers = trackers; // observability for tests
@@ -1432,16 +1434,18 @@
     scheduleHashUpdate();
   }
 
+  function setSpeed(speed) {
+    approx.speed = speed;
+    document.querySelectorAll('#approx-bar .speed').forEach(b =>
+      b.classList.toggle('active', b.dataset.speed === speed));
+  }
+
   approxPauseBtn.addEventListener('click', () => {
     approx.paused = !approx.paused;
     approxPauseBtn.textContent = approx.paused ? 'Resume' : 'Pause';
   });
   for (const btn of document.querySelectorAll('#approx-bar .speed')) {
-    btn.addEventListener('click', () => {
-      approx.speed = btn.dataset.speed;
-      document.querySelectorAll('#approx-bar .speed').forEach(b =>
-        b.classList.toggle('active', b === btn));
-    });
+    btn.addEventListener('click', () => setSpeed(btn.dataset.speed));
   }
 
   // Approximate destroys the current drawing, so it warns first; the
