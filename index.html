@@ -162,6 +162,12 @@
   .pic-row .pic-thumb { flex: none; width: 22px; height: 22px; }
   .pic-row .pic-name { flex: none; width: 56px; color: var(--hint); }
   .pic-row select { flex: 1; }
+  .pic-upload {
+    flex: none;
+    padding: 4px 9px;
+    line-height: 1;
+    font-size: 12px;
+  }
   #approximate {
     background: var(--accent);
     color: #fff;
@@ -1093,6 +1099,7 @@
   const picsBox = document.getElementById('pics');
   const picFileInput = document.getElementById('pic-file');
   let uploadTarget = -1; // layer index awaiting a file pick
+  let uploadButton = null; // its button, for error feedback
 
   function renderPicRows() {
     picsBox.textContent = '';
@@ -1119,7 +1126,6 @@
       const sel = document.createElement('select');
       const options = [['none', 'No picture'], ['tiger', 'Tiger'], ['woman', 'Woman']];
       if (layer.pic && !layer.pic.builtin) options.push(['custom', layer.pic.name]);
-      options.push(['upload', 'Upload image…']);
       for (const [v, label] of options) {
         const opt = document.createElement('option');
         opt.value = v;
@@ -1128,11 +1134,7 @@
       }
       sel.value = layer.pic ? (layer.pic.builtin || 'custom') : 'none';
       sel.addEventListener('change', () => {
-        if (sel.value === 'upload') {
-          uploadTarget = idx;
-          picFileInput.click();
-          sel.value = layer.pic ? (layer.pic.builtin || 'custom') : 'none';
-        } else if (sel.value === 'none') {
+        if (sel.value === 'none') {
           delete layer.pic;
           renderPicRows();
         } else if (sel.value !== 'custom') {
@@ -1141,12 +1143,33 @@
         }
       });
 
+      // a real button: iOS only opens the file picker from a direct tap,
+      // not from a <select> change event
+      const upload = document.createElement('button');
+      upload.type = 'button';
+      upload.className = 'pic-upload';
+      upload.textContent = '⬆';
+      upload.setAttribute('aria-label', `Upload image for layer ${idx + 1}`);
+      upload.addEventListener('click', () => {
+        uploadTarget = idx;
+        uploadButton = upload;
+        picFileInput.click();
+      });
+
       row.appendChild(thumb);
       row.appendChild(name);
       row.appendChild(sel);
+      row.appendChild(upload);
       picsBox.appendChild(row);
     });
     approximateBtn.disabled = !workingLayers.some(l => l.pic);
+  }
+
+  function flagUploadProblem(text) {
+    if (!uploadButton) return;
+    const btn = uploadButton;
+    btn.textContent = text;
+    setTimeout(() => { btn.textContent = '⬆'; }, 2500);
   }
 
   picFileInput.addEventListener('change', async () => {
@@ -1164,8 +1187,12 @@
       if (points) {
         workingLayers[uploadTarget].pic = { name: file.name, points };
         renderPicRows();
+      } else {
+        flagUploadProblem('no shape');
       }
-    } catch (e) { /* undecodable image — leave the picture unchanged */ }
+    } catch (e) {
+      flagUploadProblem('failed');
+    }
   });
 
   addLayerBtn.addEventListener('click', () => {
