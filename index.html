@@ -208,7 +208,7 @@
   <g id="nodes"></g>
 </svg>
 <script>
-(function () {
+(async function () {
   const svg = document.getElementById('canvas');
   const edgesLayer = document.getElementById('edges');
   const nodesLayer = document.getElementById('nodes');
@@ -401,7 +401,11 @@
     return bytes;
   }
 
-  function encodeState() {
+  // v4 stores coordinates as successive deltas (first one absolute) and
+  // deflates the body — deltas on circle-ish layouts are smooth, which is
+  // what makes deflate worthwhile; absolute int16s don't compress at all.
+  // Deltas may wrap mod 2^16; since originals fit int16, decode is exact.
+  function stateBytes(delta) {
     const dv = new DataView(new ArrayBuffer(2 + layers.length + 4 * N));
     dv.setUint8(0, N);
     dv.setUint8(1, layers.length);
@@ -409,46 +413,79 @@
       dv.setUint8(2 + i, (TYPE_IDS.indexOf(l.type) << 4) | COLOR_IDS.indexOf(l.color));
     });
     const fixed = v => Math.max(-32768, Math.min(32767, Math.round(v * 10)));
-    let o = 2 + layers.length;
+    let o = 2 + layers.length, px = 0, py = 0;
     for (const n of nodes) {
-      dv.setInt16(o, fixed(n.x), true);
-      dv.setInt16(o + 2, fixed(n.y), true);
+      const x = fixed(n.x), y = fixed(n.y);
+      dv.setInt16(o, delta ? x - px : x, true); // setInt16 wraps mod 2^16
+      dv.setInt16(o + 2, delta ? y - py : y, true);
+      if (delta) { px = x; py = y; }
       o += 4;
     }
-    return '3' + bytesToB64url(new Uint8Array(dv.buffer));
+    return new Uint8Array(dv.buffer);
   }
 
-  function decodeV3(str) {
+  function parseStateBytes(bytes, delta) {
+    if (bytes.length < 3) return null;
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const n = dv.getUint8(0);
+    const lc = dv.getUint8(1);
+    if (n < MIN_NODES || n > MAX_NODES || lc < 1 || lc > MAX_LAYERS) return null;
+    if (bytes.length !== 2 + lc + 4 * n) return null;
+    const l = [];
+    for (let i = 0; i < lc; i++) {
+      const b = dv.getUint8(2 + i);
+      const type = TYPE_IDS[b >> 4], color = COLOR_IDS[b & 15];
+      if (!type || !color) return null;
+      l.push({ type, color });
+    }
+    const p = [];
+    let o = 2 + lc, px = 0, py = 0;
+    for (let i = 0; i < n; i++) {
+      let x = dv.getInt16(o, true), y = dv.getInt16(o + 2, true);
+      if (delta) {
+        x = ((px + x) << 16) >> 16; // undo the mod-2^16 wrap
+        y = ((py + y) << 16) >> 16;
+        px = x; py = y;
+      }
+      p.push([x / 10, y / 10]);
+      o += 4;
+    }
+    return { p, l };
+  }
+
+  async function deflateBytes(bytes) {
+    const stream = new Blob([bytes]).stream()
+      .pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function inflateBytes(bytes) {
+    const stream = new Blob([bytes]).stream()
+      .pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function encodeState() {
+    const v3 = '3' + bytesToB64url(stateBytes(false));
+    if (typeof CompressionStream === 'undefined') return v3;
     try {
-      const bytes = b64urlToBytes(str);
-      if (bytes.length < 3) return null;
-      const dv = new DataView(bytes.buffer);
-      const n = dv.getUint8(0);
-      const lc = dv.getUint8(1);
-      if (n < MIN_NODES || n > MAX_NODES || lc < 1 || lc > MAX_LAYERS) return null;
-      if (bytes.length !== 2 + lc + 4 * n) return null;
-      const l = [];
-      for (let i = 0; i < lc; i++) {
-        const b = dv.getUint8(2 + i);
-        const type = TYPE_IDS[b >> 4], color = COLOR_IDS[b & 15];
-        if (!type || !color) return null;
-        l.push({ type, color });
-      }
-      const p = [];
-      let o = 2 + lc;
-      for (let i = 0; i < n; i++) {
-        p.push([dv.getInt16(o, true) / 10, dv.getInt16(o + 2, true) / 10]);
-        o += 4;
-      }
-      return { p, l };
+      const v4 = '4' + bytesToB64url(await deflateBytes(stateBytes(true)));
+      return v4.length < v3.length ? v4 : v3; // random layouts can inflate
     } catch (e) {
-      return null;
+      return v3;
     }
   }
 
-  function decodeState(str) {
+  async function decodeState(str) {
     if (/^[0-9]/.test(str)) {
-      if (str[0] === '3') return decodeV3(str.slice(1));
+      try {
+        if (str[0] === '3') return parseStateBytes(b64urlToBytes(str.slice(1)), false);
+        if (str[0] === '4' && typeof DecompressionStream !== 'undefined') {
+          return parseStateBytes(await inflateBytes(b64urlToBytes(str.slice(1))), true);
+        }
+      } catch (e) {
+        return null;
+      }
       return null; // a future version this build doesn't understand
     }
     // legacy base64-JSON formats
@@ -509,7 +546,7 @@
   }
 
   // ---- Initial state: shared link beats saved state beats defaults ----
-  const fromHash = location.hash.length > 1 ? decodeState(location.hash.slice(1)) : null;
+  const fromHash = location.hash.length > 1 ? await decodeState(location.hash.slice(1)) : null;
   const storedLayers = loadStoredLayers();
   if (storedLayers) layers = storedLayers;
   if (fromHash) {
@@ -535,8 +572,8 @@
   }
 
   const shareBtn = document.getElementById('share');
-  shareBtn.addEventListener('click', () => {
-    location.hash = encodeState();
+  shareBtn.addEventListener('click', async () => {
+    location.hash = await encodeState();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(location.href)
         .then(() => flashLabel(shareBtn, 'Link copied!'))
