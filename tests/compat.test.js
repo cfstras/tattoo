@@ -26,6 +26,9 @@
 //    deflate-raw over the v3 body layout with coordinates stored as
 //    successive int16 deltas (first absolute, wrapping mod 2^16).
 //    The encoder emits whichever of v3/v4 is shorter.
+//  - v3/v4 byte 1: low 7 bits = layer count; bit 7 = close-the-loop
+//    flag (connect each chain's last member back to its first).
+//    Old links carry 0 there, which decodes as "open" — unchanged.
 
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -209,7 +212,7 @@ function check(name, ok, detail) {
       let buf = Buffer.from(b64, 'base64');
       if (version === '4') buf = require('zlib').inflateRawSync(buf);
       const n = buf.readUInt8(0);
-      const lc = buf.readUInt8(1);
+      const lc = buf.readUInt8(1) & 0x7f; // bit 7 is the close-the-loop flag
       let x0 = buf.readInt16LE(2 + lc);
       let y0 = buf.readInt16LE(2 + lc + 2);
       // v4 deltas: the first pair is absolute, so no summing needed for node 1
