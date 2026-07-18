@@ -147,6 +147,21 @@
     line-height: 1;
   }
   #add-layer { margin: 0 0 4px; }
+  #pics {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+  .pic-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .pic-row .pic-thumb { flex: none; width: 22px; height: 22px; }
+  .pic-row .pic-name { flex: none; width: 56px; color: var(--hint); }
+  .pic-row select { flex: 1; }
   dialog .actions {
     display: flex;
     justify-content: flex-end;
@@ -229,6 +244,9 @@
   <label>Connect first and last nodes
     <input type="checkbox" id="close-loop">
   </label>
+  <h3>Pictures</h3>
+  <div id="pics"></div>
+  <input type="file" id="pic-file" accept="image/*" hidden>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
     <button id="apply-settings" type="button">Apply</button>
@@ -285,9 +303,182 @@
     gray:   '#6b7280',
   };
 
+  // Built-in silhouette contours, 256 points each, normalized so the
+  // longest dimension spans 0..1 (aspect preserved). Sources:
+  // tiger: OpenMoji 1F405 (CC BY-SA 4.0, openmoji.org), woman:
+  // Font Awesome Free person-dress (CC BY 4.0, fontawesome.com);
+  // outlines extracted via the same pipeline as extractContour().
+  const BUILTIN_PICS = {
+    tiger: { label: 'Tiger', points: [[0.503,0],[0.49,0.005],[0.473,0.005],[0.457,0.006],[0.443,0.01],[0.426,0.01],[0.414,0.015],[0.396,0.015],[0.384,0.02],[0.367,0.02],[0.35,0.02],[0.332,0.02],[0.315,0.02],[0.298,0.02],[0.28,0.02],[0.268,0.025],[0.251,0.025],[0.238,0.03],[0.226,0.036],[0.213,0.04],[0.197,0.041],[0.179,0.041],[0.162,0.041],[0.15,0.036],[0.137,0.03],[0.12,0.03],[0.107,0.034],[0.096,0.041],[0.086,0.049],[0.081,0.061],[0.074,0.071],[0.067,0.081],[0.061,0.093],[0.051,0.1],[0.041,0.107],[0.03,0.114],[0.021,0.122],[0.015,0.134],[0.01,0.146],[0.01,0.163],[0.005,0.175],[0.005,0.193],[0,0.205],[0,0.222],[0.001,0.239],[0.008,0.249],[0.015,0.259],[0.025,0.266],[0.04,0.269],[0.052,0.274],[0.07,0.274],[0.082,0.269],[0.094,0.264],[0.106,0.259],[0.117,0.252],[0.131,0.249],[0.148,0.249],[0.165,0.249],[0.168,0.264],[0.168,0.281],[0.168,0.299],[0.157,0.306],[0.149,0.315],[0.142,0.325],[0.132,0.332],[0.122,0.34],[0.115,0.35],[0.107,0.359],[0.096,0.366],[0.091,0.379],[0.086,0.391],[0.079,0.401],[0.072,0.411],[0.071,0.428],[0.071,0.445],[0.076,0.457],[0.081,0.469],[0.086,0.482],[0.098,0.487],[0.11,0.492],[0.128,0.492],[0.142,0.49],[0.152,0.482],[0.162,0.475],[0.166,0.462],[0.168,0.446],[0.173,0.433],[0.178,0.421],[0.188,0.414],[0.197,0.406],[0.209,0.401],[0.218,0.392],[0.229,0.386],[0.241,0.381],[0.253,0.376],[0.261,0.365],[0.278,0.365],[0.295,0.365],[0.305,0.373],[0.31,0.386],[0.31,0.403],[0.31,0.42],[0.31,0.438],[0.305,0.45],[0.305,0.467],[0.305,0.485],[0.309,0.497],[0.315,0.509],[0.325,0.516],[0.336,0.523],[0.353,0.523],[0.365,0.518],[0.378,0.513],[0.386,0.504],[0.391,0.491],[0.394,0.477],[0.396,0.462],[0.401,0.45],[0.401,0.432],[0.406,0.42],[0.406,0.403],[0.406,0.385],[0.406,0.368],[0.406,0.351],[0.406,0.333],[0.406,0.316],[0.412,0.305],[0.429,0.305],[0.442,0.299],[0.459,0.299],[0.476,0.299],[0.489,0.294],[0.506,0.294],[0.518,0.289],[0.533,0.287],[0.548,0.284],[0.565,0.284],[0.582,0.284],[0.594,0.29],[0.597,0.305],[0.599,0.32],[0.604,0.332],[0.609,0.344],[0.615,0.355],[0.619,0.369],[0.625,0.381],[0.635,0.388],[0.635,0.405],[0.635,0.423],[0.631,0.437],[0.629,0.452],[0.624,0.465],[0.624,0.482],[0.619,0.494],[0.624,0.506],[0.63,0.518],[0.643,0.523],[0.655,0.528],[0.667,0.533],[0.68,0.529],[0.692,0.523],[0.701,0.514],[0.706,0.503],[0.711,0.49],[0.716,0.478],[0.721,0.465],[0.726,0.453],[0.731,0.441],[0.734,0.426],[0.741,0.416],[0.741,0.399],[0.745,0.386],[0.763,0.386],[0.78,0.386],[0.792,0.391],[0.802,0.398],[0.812,0.405],[0.822,0.413],[0.831,0.421],[0.833,0.437],[0.838,0.449],[0.838,0.467],[0.839,0.482],[0.848,0.491],[0.854,0.503],[0.866,0.508],[0.878,0.513],[0.896,0.513],[0.908,0.508],[0.92,0.503],[0.929,0.494],[0.939,0.487],[0.939,0.47],[0.94,0.462],[0.939,0.445],[0.939,0.428],[0.939,0.41],[0.947,0.401],[0.959,0.396],[0.972,0.391],[0.98,0.382],[0.986,0.371],[0.995,0.362],[0.995,0.345],[1,0.333],[0.99,0.325],[0.975,0.326],[0.97,0.339],[0.964,0.351],[0.957,0.36],[0.939,0.36],[0.922,0.36],[0.91,0.355],[0.903,0.345],[0.898,0.332],[0.893,0.32],[0.893,0.302],[0.893,0.285],[0.888,0.273],[0.888,0.255],[0.883,0.243],[0.881,0.228],[0.878,0.214],[0.873,0.201],[0.868,0.189],[0.863,0.177],[0.858,0.165],[0.853,0.152],[0.848,0.14],[0.843,0.128],[0.836,0.117],[0.827,0.108],[0.822,0.096],[0.812,0.089],[0.803,0.081],[0.795,0.071],[0.787,0.062],[0.777,0.055],[0.766,0.048],[0.757,0.041],[0.744,0.036],[0.732,0.03],[0.72,0.025],[0.708,0.02],[0.695,0.015],[0.683,0.01],[0.67,0.006],[0.653,0.005],[0.636,0.005],[0.624,0],[0.607,0],[0.589,0],[0.572,0],[0.555,0],[0.537,0],[0.52,0]] },
+    woman: { label: 'Woman', points: [[0.458,0],[0.445,0.006],[0.426,0.006],[0.408,0.006],[0.395,0.012],[0.376,0.012],[0.363,0.018],[0.35,0.024],[0.337,0.03],[0.324,0.036],[0.311,0.042],[0.298,0.048],[0.286,0.055],[0.274,0.062],[0.265,0.071],[0.252,0.077],[0.244,0.089],[0.232,0.096],[0.225,0.107],[0.214,0.116],[0.205,0.125],[0.196,0.136],[0.19,0.149],[0.179,0.156],[0.173,0.169],[0.164,0.179],[0.155,0.189],[0.149,0.201],[0.137,0.209],[0.131,0.221],[0.125,0.234],[0.116,0.244],[0.107,0.254],[0.101,0.267],[0.089,0.274],[0.083,0.287],[0.075,0.298],[0.068,0.31],[0.06,0.32],[0.054,0.333],[0.042,0.34],[0.036,0.353],[0.027,0.363],[0.018,0.373],[0.012,0.386],[0.005,0.399],[0,0.412],[0,0.431],[0,0.45],[0.006,0.463],[0.012,0.476],[0.019,0.488],[0.03,0.496],[0.042,0.503],[0.058,0.506],[0.071,0.512],[0.09,0.512],[0.103,0.506],[0.119,0.503],[0.129,0.494],[0.137,0.483],[0.149,0.476],[0.162,0.47],[0.18,0.47],[0.199,0.47],[0.202,0.486],[0.202,0.505],[0.202,0.524],[0.196,0.537],[0.19,0.55],[0.185,0.563],[0.18,0.577],[0.179,0.595],[0.173,0.608],[0.167,0.621],[0.161,0.634],[0.157,0.649],[0.16,0.661],[0.161,0.679],[0.173,0.686],[0.185,0.693],[0.2,0.696],[0.219,0.696],[0.238,0.696],[0.257,0.696],[0.262,0.71],[0.262,0.729],[0.262,0.748],[0.262,0.767],[0.262,0.786],[0.262,0.805],[0.262,0.824],[0.262,0.842],[0.262,0.861],[0.262,0.88],[0.262,0.899],[0.262,0.918],[0.262,0.937],[0.262,0.956],[0.262,0.975],[0.262,0.994],[0.275,1],[0.294,1],[0.313,1],[0.331,1],[0.35,1],[0.369,1],[0.388,1],[0.407,1],[0.426,1],[0.429,0.984],[0.429,0.965],[0.429,0.946],[0.429,0.927],[0.429,0.908],[0.429,0.889],[0.429,0.87],[0.429,0.851],[0.429,0.832],[0.429,0.813],[0.429,0.794],[0.429,0.775],[0.429,0.756],[0.429,0.737],[0.429,0.719],[0.429,0.7],[0.444,0.696],[0.463,0.696],[0.482,0.696],[0.501,0.696],[0.512,0.705],[0.512,0.723],[0.512,0.742],[0.512,0.761],[0.512,0.78],[0.512,0.799],[0.512,0.818],[0.512,0.837],[0.512,0.856],[0.512,0.875],[0.512,0.894],[0.512,0.913],[0.512,0.932],[0.512,0.951],[0.512,0.969],[0.512,0.988],[0.519,1],[0.538,1],[0.557,1],[0.576,1],[0.595,1],[0.614,1],[0.633,1],[0.652,1],[0.671,1],[0.679,0.989],[0.679,0.97],[0.679,0.951],[0.679,0.932],[0.679,0.913],[0.679,0.894],[0.679,0.875],[0.679,0.856],[0.679,0.838],[0.679,0.819],[0.679,0.8],[0.679,0.781],[0.679,0.762],[0.679,0.743],[0.679,0.724],[0.679,0.705],[0.689,0.696],[0.708,0.696],[0.727,0.696],[0.746,0.696],[0.759,0.69],[0.772,0.685],[0.78,0.674],[0.786,0.661],[0.78,0.648],[0.778,0.631],[0.774,0.616],[0.768,0.603],[0.762,0.59],[0.756,0.577],[0.755,0.56],[0.75,0.545],[0.744,0.532],[0.738,0.519],[0.738,0.5],[0.738,0.481],[0.746,0.47],[0.765,0.47],[0.784,0.47],[0.797,0.476],[0.804,0.488],[0.815,0.495],[0.824,0.506],[0.839,0.509],[0.856,0.512],[0.875,0.512],[0.888,0.506],[0.901,0.5],[0.914,0.494],[0.923,0.484],[0.929,0.471],[0.935,0.458],[0.94,0.445],[0.94,0.426],[0.94,0.407],[0.935,0.394],[0.929,0.381],[0.922,0.369],[0.911,0.361],[0.905,0.348],[0.895,0.339],[0.887,0.328],[0.881,0.316],[0.869,0.309],[0.863,0.296],[0.854,0.286],[0.847,0.274],[0.839,0.263],[0.833,0.25],[0.821,0.243],[0.815,0.23],[0.806,0.22],[0.798,0.21],[0.792,0.197],[0.785,0.185],[0.774,0.177],[0.768,0.164],[0.758,0.155],[0.75,0.144],[0.744,0.131],[0.732,0.124],[0.724,0.113],[0.714,0.104],[0.704,0.095],[0.696,0.084],[0.684,0.077],[0.673,0.07],[0.664,0.06],[0.651,0.054],[0.638,0.048],[0.625,0.042],[0.613,0.035],[0.601,0.027],[0.586,0.024],[0.573,0.018],[0.56,0.012],[0.542,0.011],[0.528,0.006],[0.509,0.006],[0.49,0.006],[0.477,0]] },
+  };
+
+  function validPic(p) {
+    if (!p || typeof p !== 'object') return false;
+    if (p.builtin) return Object.prototype.hasOwnProperty.call(BUILTIN_PICS, p.builtin);
+    return typeof p.name === 'string' &&
+      Array.isArray(p.points) && p.points.length >= 8 && p.points.length <= 2048 &&
+      p.points.every(q => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+  }
+
+  function picPoints(pic) {
+    return pic.builtin ? BUILTIN_PICS[pic.builtin].points : pic.points;
+  }
+
+  function picLabel(pic) {
+    return pic.builtin ? BUILTIN_PICS[pic.builtin].label : pic.name;
+  }
+
+  // resample a closed polygon to n points by arc length
+  function resamplePoints(points, n) {
+    const per = [];
+    let total = 0;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      per.push(total);
+      total += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    }
+    const out = [];
+    let seg = 0;
+    for (let k = 0; k < n; k++) {
+      const target = (k / n) * total;
+      while (seg < points.length - 1 && per[seg + 1] <= target) seg++;
+      const a = points[seg], b = points[(seg + 1) % points.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const t = (target - per[seg]) / len;
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+    return out;
+  }
+
+  // Image -> outline contour extraction. This exact code is embedded in
+  // index.html (extractContour) and reused by the offline generator.
+  // Pipeline: rasterize to a small canvas, threshold (alpha if the image
+  // has transparency, darkness otherwise), morphological closing (fuses
+  // small gaps like a head above shoulders), boundary-edge cycle tracing
+  // of the largest contour, arc-length resampling, normalization (max
+  // dimension spans 0..1, aspect preserved).
+  async function extractContour(imgSrc, gridSize, samples) {
+    gridSize = gridSize || 200;
+    samples = samples || 256;
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = imgSrc;
+    });
+    const scale = gridSize / Math.max(img.naturalWidth, img.naturalHeight);
+    const w = Math.max(2, Math.round(img.naturalWidth * scale));
+    const h = Math.max(2, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 250) { hasAlpha = true; break; }
+    }
+    let mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
+      mask[i] = hasAlpha ? (a > 128 ? 1 : 0) : ((r + g + b) < 690 ? 1 : 0);
+    }
+
+    // morphological closing (box dilate then erode) to fuse nearby parts
+    const rad = Math.max(2, Math.round(gridSize * 0.02));
+    const morph = (src, isDilate) => {
+      const out = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let val = isDilate ? 0 : 1;
+          for (let dy = -rad; dy <= rad; dy++) {
+            for (let dx = -rad; dx <= rad; dx++) {
+              const nx = x + dx, ny = y + dy;
+              const v = nx >= 0 && nx < w && ny >= 0 && ny < h ? src[ny * w + nx] : 0;
+              if (isDilate && v) { val = 1; dy = dx = rad + 1; }
+              if (!isDilate && !v) { val = 0; dy = dx = rad + 1; }
+            }
+          }
+          out[y * w + x] = val;
+        }
+      }
+      return out;
+    };
+    mask = morph(morph(mask, true), false);
+
+    // Directed boundary edges of solid pixels, oriented so they always
+    // form closed cycles: top side right-to-left, bottom left-to-right,
+    // left side downwards, right side upwards. Walk the longest cycle.
+    const solid = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? mask[y * w + x] : 0);
+    const key = (x, y) => y * (w + 1) + x;
+    const edgesFrom = new Map(); // start vertex -> [end vertices]
+    const addEdge = (x1, y1, x2, y2) => {
+      const k = key(x1, y1);
+      if (!edgesFrom.has(k)) edgesFrom.set(k, []);
+      edgesFrom.get(k).push(key(x2, y2));
+    };
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!mask[y * w + x]) continue;
+        if (!solid(x, y - 1)) addEdge(x + 1, y, x, y);
+        if (!solid(x, y + 1)) addEdge(x, y + 1, x + 1, y + 1);
+        if (!solid(x - 1, y)) addEdge(x, y, x, y + 1);
+        if (!solid(x + 1, y)) addEdge(x + 1, y + 1, x + 1, y);
+      }
+    }
+    let best = null;
+    for (const [startKey] of edgesFrom) {
+      while (edgesFrom.get(startKey) && edgesFrom.get(startKey).length) {
+        const cycle = [];
+        let k = startKey;
+        while (true) {
+          const outs = edgesFrom.get(k);
+          if (!outs || !outs.length) break;
+          cycle.push(k);
+          k = outs.pop();
+          if (k === startKey) break;
+        }
+        if (!best || cycle.length > best.length) best = cycle;
+      }
+    }
+    if (!best || best.length < 8) return null;
+    const pts = best.map(k => [k % (w + 1), Math.floor(k / (w + 1))]);
+
+    // resample by arc length to a fixed count
+    const per = [];
+    let total = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      per.push(total);
+      total += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    }
+    const res = [];
+    let seg = 0;
+    for (let k = 0; k < samples; k++) {
+      const target = (k / samples) * total;
+      while (seg < pts.length - 1 && per[seg + 1] <= target) seg++;
+      const a = pts[seg], b = pts[(seg + 1) % pts.length];
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const t = (target - per[seg]) / segLen;
+      res.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+
+    // normalize: max dimension spans 0..1, aspect preserved
+    const xs = res.map(p => p[0]), ys = res.map(p => p[1]);
+    const minX = Math.min(...xs), minY = Math.min(...ys);
+    const span = Math.max(Math.max(...xs) - minX, Math.max(...ys) - minY) || 1;
+    return res.map(p => [
+      Math.round((p[0] - minX) / span * 1000) / 1000,
+      Math.round((p[1] - minY) / span * 1000) / 1000,
+    ]);
+  }
+
   const DEFAULT_LAYERS = [
-    { type: 'all', color: 'black' },
-    { type: 'even', color: 'red' },
+    { type: 'all', color: 'black', pic: { builtin: 'tiger' } },
+    { type: 'even', color: 'red', pic: { builtin: 'woman' } },
     { type: 'prime', color: 'blue' },
   ];
   let layers = DEFAULT_LAYERS.map(l => ({ ...l }));
@@ -571,7 +762,12 @@
   function loadStoredLayers() {
     try {
       const arr = JSON.parse(localStorage.getItem(LAYERS_KEY));
-      return validLayers(arr) ? arr : null;
+      if (!validLayers(arr)) return null;
+      return arr.map(l => {
+        const clean = { type: l.type, color: l.color };
+        if (validPic(l.pic)) clean.pic = l.pic;
+        return clean;
+      });
     } catch (e) {
       return null;
     }
@@ -794,6 +990,7 @@
       colorSel.addEventListener('change', () => {
         layer.color = colorSel.value;
         swatch.style.background = PRESETS[layer.color];
+        renderPicRows(); // thumbnails carry the layer color
       });
 
       const remove = document.createElement('button');
@@ -814,7 +1011,86 @@
       layersBox.appendChild(row);
     });
     addLayerBtn.disabled = workingLayers.length >= MAX_LAYERS;
+    renderPicRows();
   }
+
+  // ---- Per-layer pictures ----
+  const picsBox = document.getElementById('pics');
+  const picFileInput = document.getElementById('pic-file');
+  let uploadTarget = -1; // layer index awaiting a file pick
+
+  function renderPicRows() {
+    picsBox.textContent = '';
+    workingLayers.forEach((layer, idx) => {
+      const row = document.createElement('div');
+      row.className = 'pic-row';
+
+      const thumb = make('svg', {
+        class: 'pic-thumb',
+        viewBox: '-0.05 -0.05 1.1 1.1',
+        preserveAspectRatio: 'xMidYMid meet',
+      });
+      if (layer.pic) {
+        thumb.appendChild(make('polygon', {
+          points: picPoints(layer.pic).map(p => p.join(',')).join(' '),
+          fill: PRESETS[layer.color],
+        }));
+      }
+
+      const name = document.createElement('span');
+      name.className = 'pic-name';
+      name.textContent = `Layer ${idx + 1}`;
+
+      const sel = document.createElement('select');
+      const options = [['none', 'No picture'], ['tiger', 'Tiger'], ['woman', 'Woman']];
+      if (layer.pic && !layer.pic.builtin) options.push(['custom', layer.pic.name]);
+      options.push(['upload', 'Upload image…']);
+      for (const [v, label] of options) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+      sel.value = layer.pic ? (layer.pic.builtin || 'custom') : 'none';
+      sel.addEventListener('change', () => {
+        if (sel.value === 'upload') {
+          uploadTarget = idx;
+          picFileInput.click();
+          sel.value = layer.pic ? (layer.pic.builtin || 'custom') : 'none';
+        } else if (sel.value === 'none') {
+          delete layer.pic;
+          renderPicRows();
+        } else if (sel.value !== 'custom') {
+          layer.pic = { builtin: sel.value };
+          renderPicRows();
+        }
+      });
+
+      row.appendChild(thumb);
+      row.appendChild(name);
+      row.appendChild(sel);
+      picsBox.appendChild(row);
+    });
+  }
+
+  picFileInput.addEventListener('change', async () => {
+    const file = picFileInput.files[0];
+    picFileInput.value = '';
+    if (!file || uploadTarget < 0 || uploadTarget >= workingLayers.length) return;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const points = await extractContour(dataUrl, 200, 256);
+      if (points) {
+        workingLayers[uploadTarget].pic = { name: file.name, points };
+        renderPicRows();
+      }
+    } catch (e) { /* undecodable image — leave the picture unchanged */ }
+  });
 
   addLayerBtn.addEventListener('click', () => {
     if (workingLayers.length >= MAX_LAYERS) return;
