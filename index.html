@@ -35,14 +35,14 @@
   }
   .edge { stroke-width: 1.5; }
   .node .hit { fill: transparent; cursor: grab; }
-  .node .dot {
+  .dot {
     fill: var(--node-fill);
     stroke: var(--node-stroke);
     stroke-width: 1.5;
     pointer-events: none;
   }
   .node.dragging .hit { cursor: grabbing; }
-  .node.dragging .dot { stroke: var(--grab); }
+  .dot.dragging { stroke: var(--grab); }
   .node text {
     fill: var(--label);
     font-size: 10px;
@@ -194,11 +194,14 @@
   }
   /* plain-number style: no ring, just a background halo so edges keep
      a little margin around the digits */
-  #canvas.plain-nodes .node .dot {
+  #canvas.plain-nodes .dot {
     fill: var(--bg);
     stroke: none;
   }
-  .debug-outlines { pointer-events: none; }
+  .debug-outlines {
+    pointer-events: none;
+    opacity: 0.5; /* in front of everything, but see-through */
+  }
   #version {
     position: fixed;
     bottom: 6px;
@@ -323,18 +326,20 @@
 </dialog>
 <svg id="canvas">
   <g id="edges"></g>
+  <g id="halos"></g>
   <g id="nodes"></g>
 </svg>
 <div id="version"></div>
 <script>
 (async function () {
   // CI stamps the deployed version over this placeholder
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.1';
   document.getElementById('version').textContent =
     APP_VERSION.indexOf('__') === 0 ? 'dev' : 'v' + APP_VERSION;
 
   const svg = document.getElementById('canvas');
   const edgesLayer = document.getElementById('edges');
+  const halosLayer = document.getElementById('halos');
   const nodesLayer = document.getElementById('nodes');
 
   const NODE_R = 11;
@@ -762,21 +767,25 @@
     N = n;
     nodes.length = 0;
     nodesLayer.textContent = '';
+    halosLayer.textContent = '';
 
     for (let i = 0; i < N; i++) nodes.push({ x: 0, y: 0 });
 
     nodes.forEach((node, i) => {
       const g = make('g', { class: 'node' });
       const hit = make('circle', { class: 'hit', r: HIT_R });
+      // the halo/disc lives in its own layer so every disc paints below
+      // every number: a node's margin can never hide a neighbor's label
       const dot = make('circle', { class: 'dot', r: NODE_R });
       const label = make('text', {});
       label.textContent = i + 1;
       g.appendChild(hit);
-      g.appendChild(dot);
       g.appendChild(label);
       g.dataset.index = i;
+      halosLayer.appendChild(dot);
       nodesLayer.appendChild(g);
       node.g = g;
+      node.dot = dot;
     });
     rebuildEdges();
   }
@@ -795,6 +804,8 @@
   function updateNode(i) {
     const n = nodes[i];
     n.g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+    n.dot.setAttribute('cx', n.x);
+    n.dot.setAttribute('cy', n.y);
   }
 
   function updateEdgesFor(i) {
@@ -1168,7 +1179,7 @@
       (nodeStyle === 'number'
         ? `.dot{fill:${v('--bg')};stroke:none}`
         : `.dot{fill:${v('--node-fill')};stroke:${v('--node-stroke')};stroke-width:1.5}`) +
-      (nodesHidden ? `.node{display:none}` : '') +
+      (nodesHidden ? `.node,.dot{display:none}` : '') +
       `.debug-outlines{display:none}` +
       `text{fill:${v('--label')};font-size:10px;text-anchor:middle;` +
       `dominant-baseline:central;font-family:system-ui,sans-serif}`;
@@ -1760,6 +1771,7 @@
   toggleNodesBtn.addEventListener('click', () => {
     nodesHidden = !nodesHidden;
     nodesLayer.style.display = nodesHidden ? 'none' : '';
+    halosLayer.style.display = nodesHidden ? 'none' : '';
     toggleNodesBtn.textContent = nodesHidden ? 'Show nodes' : 'Hide nodes';
     toggleNodesBtn.classList.toggle('active', nodesHidden);
   });
@@ -1781,7 +1793,9 @@
     offsetX = nodes[dragIndex].x - p.x;
     offsetY = nodes[dragIndex].y - p.y;
     g.classList.add('dragging');
-    nodesLayer.appendChild(g); // raise to top
+    nodes[dragIndex].dot.classList.add('dragging');
+    nodesLayer.appendChild(g); // raise to top (within each layer)
+    halosLayer.appendChild(nodes[dragIndex].dot);
     svg.setPointerCapture(evt.pointerId);
     evt.preventDefault();
   });
@@ -1798,6 +1812,7 @@
   function endDrag() {
     if (dragIndex < 0) return;
     nodes[dragIndex].g.classList.remove('dragging');
+    nodes[dragIndex].dot.classList.remove('dragging');
     dragIndex = -1;
     saveState();
     scheduleHashUpdate();
