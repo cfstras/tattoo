@@ -168,11 +168,11 @@
     border-color: var(--accent);
   }
   #approx-bar {
-    position: fixed;
-    top: 10px;
-    left: 12px;
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
+    margin-right: auto; /* controls left, tools right, wraps on mobile */
+    pointer-events: none;
   }
   #approx-bar[hidden] { display: none; }
   #approx-bar .speed.active {
@@ -226,13 +226,13 @@
 </style>
 </head>
 <body>
-<div id="approx-bar" hidden>
-  <button id="approx-pause" class="btn" type="button">Pause</button>
-  <button class="btn speed active" data-speed="slow" type="button">Slow</button>
-  <button class="btn speed" data-speed="fast" type="button">Fast</button>
-  <button class="btn speed" data-speed="max" type="button">Max</button>
-</div>
 <div id="bar">
+  <div id="approx-bar" hidden>
+    <button id="approx-pause" class="btn" type="button">Pause</button>
+    <button class="btn speed active" data-speed="slow" type="button">Slow</button>
+    <button class="btn speed" data-speed="fast" type="button">Fast</button>
+    <button class="btn speed" data-speed="max" type="button">Max</button>
+  </div>
   <button id="share" class="btn" type="button">Share</button>
   <button id="download" class="btn" type="button">Download SVG</button>
   <button id="settings-btn" class="btn" type="button">Settings</button>
