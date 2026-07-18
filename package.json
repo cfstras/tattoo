@@ -2,7 +2,7 @@
   "name": "tattoo",
   "private": true,
   "scripts": {
-    "test": "node tests/compat.test.js"
+    "test": "node tests/run-all.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"
