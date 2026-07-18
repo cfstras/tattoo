@@ -1325,6 +1325,10 @@
 
     const ALPHA = 0.2; // fraction of the remaining distance per step
     let noiseMag = 8; // px of random wander, decaying per iteration
+    // overshooting connector tips stay on the canvas
+    const bounds = svg.getBoundingClientRect();
+    const clampX = v => Math.max(8, Math.min(bounds.width - 8, v));
+    const clampY = v => Math.max(46, Math.min(bounds.height - 8, v));
     let iter = 0;
     let maxMove = Infinity;
     window.__approx = { done: false, iter, maxMove }; // observability for tests
@@ -1341,12 +1345,11 @@
       // connectors — they may cross gaps without being punished, which
       // is what lets one chain trace an image while a sub-chain traces
       // another. A weak node-level pull keeps ordering and coverage.
-      const COVER_W = 1, EDGE_WINDOW = 3;
-      // nodes claimed by a single pictured layer snap hard onto its
-      // outline (sharp tips); shared nodes get only a weak ordering pull
-      // and let the edge coverage decide where they settle
-      const layerCount = new Uint8Array(N);
-      for (const tr of trackers) for (const idx of tr.members) layerCount[idx]++;
+      // The fit lives in the edge-coverage term; the node-level pull is
+      // only a faint anchor so nodes whose segments win no coverage
+      // (slack stretches) don't freeze in place. Anything stronger pins
+      // nodes onto the outline and defeats the edge-based fit.
+      const NODE_W = 0.1, COVER_W = 1, EDGE_WINDOW = 3;
       const pullX = new Float64Array(N);
       const pullY = new Float64Array(N);
       const pullW = new Float64Array(N);
@@ -1360,10 +1363,9 @@
             const d = (p[0] - node.x) ** 2 + (p[1] - node.y) ** 2;
             if (d < bestD) { bestD = d; bx = p[0]; by = p[1]; }
           }
-          const nodeW = layerCount[idx] === 1 ? 1 : 0.15;
-          pullX[idx] += (bx - node.x) * nodeW;
-          pullY[idx] += (by - node.y) * nodeW;
-          pullW[idx] += nodeW;
+          pullX[idx] += (bx - node.x) * NODE_W;
+          pullY[idx] += (by - node.y) * NODE_W;
+          pullW[idx] += NODE_W;
         });
         const M = tr.members.length;
         const edgeCount = M - 1 + tr.wrap;
@@ -1405,8 +1407,8 @@
         const mag = Math.random() * noiseMag;
         const mx = ALPHA * pullX[i] / pullW[i] + Math.cos(ang) * mag;
         const my = ALPHA * pullY[i] / pullW[i] + Math.sin(ang) * mag;
-        nodes[i].x += mx;
-        nodes[i].y += my;
+        nodes[i].x = clampX(nodes[i].x + mx);
+        nodes[i].y = clampY(nodes[i].y + my);
         maxMove = Math.max(maxMove, Math.hypot(mx, my));
       }
       noiseMag *= 0.97;
