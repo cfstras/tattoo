@@ -1295,18 +1295,10 @@
         members,
         base: members.map((_, k) => Math.round(k * slot)),
         drift: Math.max(2, Math.ceil(slot * 1.5)),
+        wrap: closeLoop && members.length > 2 ? 1 : 0,
       });
     });
-    if (!trackers.length) return null;
-    // where outlines diverge, a shared node can't sit on both — bias it
-    // toward its LAST pictured layer (weight 2:1) so that layer's chain
-    // stays recognizable instead of both blurring into a midway blend
-    const lastTracker = new Array(N).fill(-1);
-    trackers.forEach((tr, ti) => tr.members.forEach(idx => { lastTracker[idx] = ti; }));
-    trackers.forEach((tr, ti) => {
-      tr.weights = tr.members.map(idx => (lastTracker[idx] === ti ? 2 : 1));
-    });
-    return trackers;
+    return trackers.length ? trackers : null;
   }
 
   function stopApprox() {
@@ -1340,32 +1332,77 @@
       while (approx.paused && gen === approx.gen) await sleep(100);
       if (gen !== approx.gen) return;
 
+      // The fit is edge-focused, in the coverage direction: every sample
+      // of a layer's OUTLINE pulls the nearest nearby chain segment
+      // toward it, with the correction split between the segment's
+      // endpoints. Segments the outline doesn't claim act as free
+      // connectors — they may cross gaps without being punished, which
+      // is what lets one chain trace an image while a sub-chain traces
+      // another. A weak node-level pull keeps ordering and coverage.
+      const COVER_W = 1, EDGE_WINDOW = 3;
+      // nodes claimed by a single pictured layer snap hard onto its
+      // outline (sharp tips); shared nodes get only a weak ordering pull
+      // and let the edge coverage decide where they settle
+      const layerCount = new Uint8Array(N);
+      for (const tr of trackers) for (const idx of tr.members) layerCount[idx]++;
       const pullX = new Float64Array(N);
       const pullY = new Float64Array(N);
-      const pulls = new Float64Array(N);
+      const pullW = new Float64Array(N);
       for (const tr of trackers) {
         const L = tr.outline.length;
         tr.members.forEach((idx, k) => {
           const node = nodes[idx];
           let bestD = Infinity, bx = 0, by = 0;
           for (let o = -tr.drift; o <= tr.drift; o++) {
-            const p = tr.outline[(tr.base[k] + o + L) % L];
+            const p = tr.outline[((tr.base[k] + o) % L + L) % L];
             const d = (p[0] - node.x) ** 2 + (p[1] - node.y) ** 2;
             if (d < bestD) { bestD = d; bx = p[0]; by = p[1]; }
           }
-          const w = tr.weights[k];
-          pullX[idx] += (bx - node.x) * w;
-          pullY[idx] += (by - node.y) * w;
-          pulls[idx] += w;
+          const nodeW = layerCount[idx] === 1 ? 1 : 0.15;
+          pullX[idx] += (bx - node.x) * nodeW;
+          pullY[idx] += (by - node.y) * nodeW;
+          pullW[idx] += nodeW;
         });
+        const M = tr.members.length;
+        const edgeCount = M - 1 + tr.wrap;
+        const slot = L / M;
+        for (let j = 0; j < L; j++) {
+          const s = tr.outline[j];
+          // candidate segments: those whose home stretch is near this sample
+          const kc = Math.floor(j / slot);
+          let bestD = Infinity, bk = -1, bt = 0, bpx = 0, bpy = 0;
+          for (let o = -EDGE_WINDOW; o <= EDGE_WINDOW; o++) {
+            const k = tr.wrap ? ((kc + o) % edgeCount + edgeCount) % edgeCount
+              : Math.min(edgeCount - 1, Math.max(0, kc + o));
+            const a = nodes[tr.members[k]];
+            const b = nodes[tr.members[(k + 1) % M]];
+            const vx = b.x - a.x, vy = b.y - a.y;
+            const len2 = vx * vx + vy * vy || 1;
+            const t = Math.max(0, Math.min(1,
+              ((s[0] - a.x) * vx + (s[1] - a.y) * vy) / len2));
+            const px = a.x + vx * t, py = a.y + vy * t;
+            const d = (s[0] - px) ** 2 + (s[1] - py) ** 2;
+            if (d < bestD) { bestD = d; bk = k; bt = t; bpx = px; bpy = py; }
+          }
+          if (bk < 0) continue;
+          const w = COVER_W / slot; // normalize: L samples share M slots
+          const cx = (s[0] - bpx) * w, cy = (s[1] - bpy) * w;
+          const ai = tr.members[bk], bi = tr.members[(bk + 1) % M];
+          pullX[ai] += cx * (1 - bt);
+          pullY[ai] += cy * (1 - bt);
+          pullW[ai] += w * (1 - bt);
+          pullX[bi] += cx * bt;
+          pullY[bi] += cy * bt;
+          pullW[bi] += w * bt;
+        }
       }
       maxMove = 0;
       for (let i = 0; i < N; i++) {
-        if (!pulls[i]) continue;
+        if (!pullW[i]) continue;
         const ang = Math.random() * 2 * Math.PI;
         const mag = Math.random() * noiseMag;
-        const mx = ALPHA * pullX[i] / pulls[i] + Math.cos(ang) * mag;
-        const my = ALPHA * pullY[i] / pulls[i] + Math.sin(ang) * mag;
+        const mx = ALPHA * pullX[i] / pullW[i] + Math.cos(ang) * mag;
+        const my = ALPHA * pullY[i] / pullW[i] + Math.sin(ang) * mag;
         nodes[i].x += mx;
         nodes[i].y += my;
         maxMove = Math.max(maxMove, Math.hypot(mx, my));
