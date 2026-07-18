@@ -22,6 +22,10 @@
 //    little-endian i16 fixed-point (value * 10)]. v1/v2 hashes never
 //    start with a digit and must keep decoding. Type/color index
 //    orders are frozen append-only lists in index.html.
+//  - URL hash v4 (compressed): digit '4', then base64url of
+//    deflate-raw over the v3 body layout with coordinates stored as
+//    successive int16 deltas (first absolute, wrapping mod 2^16).
+//    The encoder emits whichever of v3/v4 is shorter.
 
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -53,6 +57,17 @@ const LEGACY_V2_HASH =
   'eyJwIjpbWzE1LDg4NV0sWzMwLDg3MF0sWzQ1LDg1NV0sWzYwLDg0MF0sWzc1LDgyNV0sWzkwLDgxMF0sWzEwNSw3OTVdLFsxMjAsNzgwXSxbMTM1LDc2NV0sWzE1MCw3NTBdLFsxNjUsNzM1XSxbMTgwLDcyMF1dLCJsIjpbeyJ0eXBlIjoib2RkIiwiY29sb3IiOiJ0ZWFsIn0seyJ0eXBlIjoibXVsdDQiLCJjb2xvciI6Im9yYW5nZSJ9XX0=';
 const LEGACY_V2_FIRST_POSITION = [15, 885];
 const LEGACY_V2_LAYER_STROKES = { 0: '#0d9488' /* teal */, 1: '#ea580c' /* orange */ };
+
+// Frozen fixtures 4+5: v3 (raw binary) and v4 (delta + deflate-raw)
+// hashes for the same state — 10 nodes at [10,10]..[100,100], one
+// all-nodes/black layer.
+const LEGACY_V3_HASH =
+  '3CgEAZABkAMgAyAAsASwBkAGQAfQB9AFYAlgCvAK8AiADIAOEA4QD6APoAw';
+const LEGACY_V4_HASH = '442JkSCESAgA';
+const BINARY_FIXTURE_POSITIONS = [
+  [10, 10], [20, 20], [30, 30], [40, 40], [50, 50],
+  [60, 60], [70, 70], [80, 80], [90, 90], [100, 100],
+];
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -120,6 +135,17 @@ function check(name, ok, detail) {
     v2layers['1'] === LEGACY_V2_LAYER_STROKES[1],
     JSON.stringify(v2layers));
 
+  // --- v3 and v4 binary hashes load identically ---
+  for (const [name, fixture] of [['v3', LEGACY_V3_HASH], ['v4', LEGACY_V4_HASH]]) {
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(`${APP_URL}#${fixture}`);
+    await page.reload();
+    state = await readState();
+    check(`${name} hash: 10 nodes load`, state.count === 10, `(got ${state.count})`);
+    check(`${name} hash: positions applied`,
+      BINARY_FIXTURE_POSITIONS.every((p, i) => state.transforms[i] === expectTransform(p)));
+  }
+
   // --- Hash takes priority over stored state ---
   await page.evaluate(([key, json]) => {
     localStorage.setItem(key, json);
@@ -172,25 +198,28 @@ function check(name, ok, detail) {
   check('current save format still matches the documented contract', savedOk);
 
   await page.click('#share');
+  await page.waitForFunction(() => location.hash.length > 1); // share encodes async
   const hashNow = await page.evaluate(() => location.hash.slice(1));
   let hashOk = false;
   try {
-    // v3 contract: version digit '3' + base64url binary (decoded here
-    // independently of the app code)
-    if (hashNow[0] === '3') {
+    // v3/v4 contract, decoded here independently of the app code
+    const version = hashNow[0];
+    if (version === '3' || version === '4') {
       const b64 = hashNow.slice(1).replace(/-/g, '+').replace(/_/g, '/');
-      const buf = Buffer.from(b64, 'base64');
+      let buf = Buffer.from(b64, 'base64');
+      if (version === '4') buf = require('zlib').inflateRawSync(buf);
       const n = buf.readUInt8(0);
       const lc = buf.readUInt8(1);
-      const posOff = 2 + lc;
-      const x0 = buf.readInt16LE(posOff) / 10;
-      const y0 = buf.readInt16LE(posOff + 2) / 10;
+      let x0 = buf.readInt16LE(2 + lc);
+      let y0 = buf.readInt16LE(2 + lc + 2);
+      // v4 deltas: the first pair is absolute, so no summing needed for node 1
       hashOk = n === 100 && lc >= 1 && lc <= 5 &&
         buf.length === 2 + lc + 4 * n &&
-        Math.abs(x0 - 600) < 1 && Math.abs(y0 - 450) < 1; // the dragged node
+        Math.abs(x0 / 10 - 600) < 1 && Math.abs(y0 / 10 - 450) < 1; // the dragged node
     }
   } catch (e) { /* hashOk stays false */ }
-  check('current share format still matches the documented contract', hashOk);
+  check('current share format still matches the documented contract', hashOk,
+    `(version ${hashNow[0]}, ${hashNow.length} chars)`);
 
   await browser.close();
 
