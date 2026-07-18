@@ -89,7 +89,7 @@ const APP = 'file://' + require('path').resolve(__dirname, '..', 'index.html');
   await page.selectOption('#node-style', 'number');
   await page.click('#apply-settings');
   let dot = await page.evaluate(() => {
-    const el = document.querySelector('.node .dot');
+    const el = document.querySelector('.dot');
     const cs = getComputedStyle(el);
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
     return { fill: cs.fill, stroke: cs.stroke, bg, r: el.getAttribute('r') };
@@ -101,7 +101,7 @@ const APP = 'file://' + require('path').resolve(__dirname, '..', 'index.html');
   // persists across reload
   await page.reload();
   dot = await page.evaluate(() => {
-    const cs = getComputedStyle(document.querySelector('.node .dot'));
+    const cs = getComputedStyle(document.querySelector('.dot'));
     return { stroke: cs.stroke, sel: undefined };
   });
   console.log('plain style persists after reload:', dot.stroke === 'none' ? 'PASS' : 'FAIL');
@@ -120,8 +120,54 @@ const APP = 'file://' + require('path').resolve(__dirname, '..', 'index.html');
   await page.selectOption('#node-style', 'circle');
   await page.click('#apply-settings');
   dot = await page.evaluate(() =>
-    getComputedStyle(document.querySelector('.node .dot')).stroke);
+    getComputedStyle(document.querySelector('.dot')).stroke);
   console.log('circle style restores the ring:', dot !== 'none' ? 'PASS' : 'FAIL');
+
+  // --- Paint order: edges < halos < labels; outlines front at 50% ---
+  const order = await page.evaluate(() => {
+    const svg = document.getElementById('canvas');
+    const kids = [...svg.children].map(el => el.id || el.className.baseVal);
+    return {
+      layers: kids.slice(0, 3),
+      dotsBeforeLabels: !!(document.getElementById('halos').compareDocumentPosition(
+        document.getElementById('nodes')) & Node.DOCUMENT_POSITION_FOLLOWING),
+    };
+  });
+  console.log('halos paint above edges and below all labels:',
+    JSON.stringify(order.layers) === '["edges","halos","nodes"]' &&
+    order.dotsBeforeLabels ? 'PASS' : 'FAIL', JSON.stringify(order.layers));
+
+  await page.click('#debug-btn');
+  const dbgFront = await page.evaluate(() => {
+    const svg = document.getElementById('canvas');
+    const overlay = document.querySelector('.debug-outlines');
+    return {
+      last: svg.lastElementChild === overlay,
+      opacity: getComputedStyle(overlay).opacity,
+    };
+  });
+  console.log('outlines overlay is frontmost at 50% opacity:',
+    dbgFront.last && dbgFront.opacity === '0.5' ? 'PASS' : 'FAIL', JSON.stringify(dbgFront));
+  await page.click('#debug-btn');
+
+  // dragging still works with split layers, and raises both parts
+  const box = await page.locator('.node[data-index="0"] .hit').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(600, 450, { steps: 5 });
+  await page.mouse.up();
+  const dragged = await page.evaluate(() => {
+    const g = document.querySelector('.node[data-index="0"]');
+    const dot = document.querySelector('#halos .dot:last-child');
+    return {
+      transform: g.getAttribute('transform'),
+      dotAt: [dot.getAttribute('cx'), dot.getAttribute('cy')],
+    };
+  });
+  console.log('drag moves label group and halo together:',
+    dragged.transform === 'translate(600, 450)' &&
+    dragged.dotAt[0] === '600' && dragged.dotAt[1] === '450' ? 'PASS' : 'FAIL',
+    JSON.stringify(dragged));
 
   await browser.close();
 })();
