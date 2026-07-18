@@ -107,6 +107,11 @@
     margin: 0 0 12px;
     accent-color: var(--accent);
   }
+  dialog input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+  }
   dialog select {
     font: inherit;
     font-size: 13px;
@@ -198,6 +203,9 @@
   <h3>Layers</h3>
   <div id="layers"></div>
   <button id="add-layer" type="button">Add layer</button>
+  <label>Connect first and last nodes
+    <input type="checkbox" id="close-loop">
+  </label>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
     <button id="apply-settings" type="button">Apply</button>
@@ -260,6 +268,7 @@
     { type: 'prime', color: 'blue' },
   ];
   let layers = DEFAULT_LAYERS.map(l => ({ ...l }));
+  let closeLoop = false; // connect each chain's last member back to its first
 
   function validLayers(arr) {
     return Array.isArray(arr) &&
@@ -285,15 +294,17 @@
       for (let i = 0; i < N; i++) {
         if (TYPES[layer.type].member(i + 1)) members.push(i);
       }
-      // open chain: consecutive members, no wrap from last back to first
-      for (let k = 0; k < members.length - 1; k++) {
+      // consecutive members; optionally close the chain into a ring
+      // (skipped below 3 members — the wrap edge would just double up)
+      const wrap = closeLoop && members.length > 2 ? 1 : 0;
+      for (let k = 0; k < members.length - 1 + wrap; k++) {
         const line = make('line', {
           class: 'edge',
           stroke: PRESETS[layer.color],
           'data-layer': li,
         });
         edgesLayer.appendChild(line);
-        edges.push({ a: members[k], b: members[k + 1], line });
+        edges.push({ a: members[k], b: members[(k + 1) % members.length], line });
       }
     });
     for (const e of edges) {
@@ -408,7 +419,8 @@
   function stateBytes(delta) {
     const dv = new DataView(new ArrayBuffer(2 + layers.length + 4 * N));
     dv.setUint8(0, N);
-    dv.setUint8(1, layers.length);
+    // low bits: layer count; bit 7: close-the-loop flag (0 in old links)
+    dv.setUint8(1, layers.length | (closeLoop ? 0x80 : 0));
     layers.forEach((l, i) => {
       dv.setUint8(2 + i, (TYPE_IDS.indexOf(l.type) << 4) | COLOR_IDS.indexOf(l.color));
     });
@@ -428,7 +440,8 @@
     if (bytes.length < 3) return null;
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const n = dv.getUint8(0);
-    const lc = dv.getUint8(1);
+    const lc = dv.getUint8(1) & 0x7f;
+    const closed = (dv.getUint8(1) & 0x80) !== 0;
     if (n < MIN_NODES || n > MAX_NODES || lc < 1 || lc > MAX_LAYERS) return null;
     if (bytes.length !== 2 + lc + 4 * n) return null;
     const l = [];
@@ -450,7 +463,7 @@
       p.push([x / 10, y / 10]);
       o += 4;
     }
-    return { p, l };
+    return { p, l, closed };
   }
 
   async function deflateBytes(bytes) {
@@ -504,6 +517,7 @@
   // ---- Persistence ----
   const STORAGE_KEY = 'node-drawing-positions-v1';
   const LAYERS_KEY = 'node-drawing-layers-v1';
+  const LOOP_KEY = 'node-drawing-closeloop-v1';
 
   function saveState() {
     try {
@@ -514,6 +528,7 @@
   function saveLayers() {
     try {
       localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
+      localStorage.setItem(LOOP_KEY, closeLoop ? '1' : '0');
     } catch (e) { /* ignore */ }
   }
 
@@ -549,8 +564,10 @@
   const fromHash = location.hash.length > 1 ? await decodeState(location.hash.slice(1)) : null;
   const storedLayers = loadStoredLayers();
   if (storedLayers) layers = storedLayers;
+  try { closeLoop = localStorage.getItem(LOOP_KEY) === '1'; } catch (e) { /* ignore */ }
   if (fromHash) {
     if (fromHash.l) layers = fromHash.l;
+    if (typeof fromHash.closed === 'boolean') closeLoop = fromHash.closed;
     applyPositions(fromHash.p);
   } else {
     const storedPositions = loadStoredPositions();
@@ -625,6 +642,7 @@
   const nodeCountValue = document.getElementById('node-count-value');
   const layersBox = document.getElementById('layers');
   const addLayerBtn = document.getElementById('add-layer');
+  const closeLoopInput = document.getElementById('close-loop');
   let pendingCount = 0; // node count awaiting reset confirmation
   let workingLayers = []; // layer config being edited in the dialog
 
@@ -721,6 +739,7 @@
     nodeCountValue.textContent = N;
     workingLayers = layers.map(l => ({ ...l }));
     renderLayerRows();
+    closeLoopInput.checked = closeLoop;
     settingsDialog.showModal();
   });
   document.getElementById('cancel-settings').addEventListener('click', () => {
@@ -729,8 +748,9 @@
   document.getElementById('apply-settings').addEventListener('click', () => {
     settingsDialog.close();
 
-    // Layer changes only redraw edges, so they apply without a reset
+    // Layer and ring changes only redraw edges, so they apply without a reset
     layers = workingLayers.map(l => ({ ...l }));
+    closeLoop = closeLoopInput.checked;
     saveLayers();
     rebuildEdges();
 
