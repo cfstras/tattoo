@@ -175,11 +175,24 @@
     pointer-events: none;
   }
   #approx-bar[hidden] { display: none; }
-  #approx-bar .speed.active {
+  #approx-bar .speed.active,
+  .btn.active {
     background: var(--accent);
     color: #fff;
     border-color: var(--accent);
   }
+  #do-approx {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  /* plain-number style: no ring, just a background halo so edges keep
+     a little margin around the digits */
+  #canvas.plain-nodes .node .dot {
+    fill: var(--bg);
+    stroke: none;
+  }
+  .debug-outlines { pointer-events: none; }
   dialog .actions {
     display: flex;
     justify-content: flex-end;
@@ -233,6 +246,8 @@
     <button class="btn speed" data-speed="fast" type="button">Fast</button>
     <button class="btn speed" data-speed="max" type="button">Max</button>
   </div>
+  <button id="debug-btn" class="btn" type="button">Outlines</button>
+  <button id="toggle-nodes" class="btn" type="button">Hide nodes</button>
   <button id="share" class="btn" type="button">Share</button>
   <button id="download" class="btn" type="button">Download SVG</button>
   <button id="settings-btn" class="btn" type="button">Settings</button>
@@ -244,6 +259,15 @@
   <div class="actions">
     <button id="cancel-reset" type="button">Cancel</button>
     <button id="do-reset" type="button">Reset</button>
+  </div>
+</dialog>
+<dialog id="confirm-approx">
+  <h2>Start approximating?</h2>
+  <p>This resets the layout and then moves every node toward the layer
+    pictures. Your current drawing is lost.</p>
+  <div class="actions">
+    <button id="cancel-approx" type="button">Cancel</button>
+    <button id="do-approx" type="button">Approximate</button>
   </div>
 </dialog>
 <dialog id="confirm-load">
@@ -267,6 +291,12 @@
   <button id="add-layer" type="button">Add layer</button>
   <label>Connect first and last nodes
     <input type="checkbox" id="close-loop">
+  </label>
+  <label>Node style
+    <select id="node-style">
+      <option value="circle">Circles</option>
+      <option value="number">Plain numbers</option>
+    </select>
   </label>
   <h3>Pictures</h3>
   <div id="pics"></div>
@@ -762,6 +792,12 @@
   const STORAGE_KEY = 'node-drawing-positions-v1';
   const LAYERS_KEY = 'node-drawing-layers-v1';
   const LOOP_KEY = 'node-drawing-closeloop-v1';
+  const STYLE_KEY = 'node-drawing-nodestyle-v1';
+  let nodeStyle = 'circle'; // 'circle' | 'number'
+
+  function applyNodeStyle() {
+    svg.classList.toggle('plain-nodes', nodeStyle === 'number');
+  }
 
   function saveState() {
     try {
@@ -773,6 +809,7 @@
     try {
       localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
       localStorage.setItem(LOOP_KEY, closeLoop ? '1' : '0');
+      localStorage.setItem(STYLE_KEY, nodeStyle);
     } catch (e) { /* ignore */ }
   }
 
@@ -900,6 +937,10 @@
   const storedLayers = loadStoredLayers();
   if (storedLayers) layers = storedLayers;
   try { closeLoop = localStorage.getItem(LOOP_KEY) === '1'; } catch (e) { /* ignore */ }
+  try {
+    if (localStorage.getItem(STYLE_KEY) === 'number') nodeStyle = 'number';
+  } catch (e) { /* ignore */ }
+  applyNodeStyle();
   const storedPositions = loadStoredPositions();
   if (fromHash && storedPositions && !sameState(fromHash, storedPositions)) {
     applyPositions(storedPositions);
@@ -954,7 +995,11 @@
     style.textContent =
       `.edge{stroke-width:1.5}` +
       `.hit{fill:none}` +
-      `.dot{fill:${v('--node-fill')};stroke:${v('--node-stroke')};stroke-width:1.5}` +
+      (nodeStyle === 'number'
+        ? `.dot{fill:${v('--bg')};stroke:none}`
+        : `.dot{fill:${v('--node-fill')};stroke:${v('--node-stroke')};stroke-width:1.5}`) +
+      (nodesHidden ? `.node{display:none}` : '') +
+      `.debug-outlines{display:none}` +
       `text{fill:${v('--label')};font-size:10px;text-anchor:middle;` +
       `dominant-baseline:central;font-family:system-ui,sans-serif}`;
     const bg = make('rect', { width: rect.width, height: rect.height, fill: v('--bg') });
@@ -1152,6 +1197,17 @@
     scheduleHashUpdate(); // keeps a custom node count reload-safe too
   });
 
+  const nodeStyleSel = document.getElementById('node-style');
+
+  function commitSettings() {
+    layers = workingLayers.map(l => ({ ...l }));
+    closeLoop = closeLoopInput.checked;
+    nodeStyle = nodeStyleSel.value === 'number' ? 'number' : 'circle';
+    saveLayers();
+    applyNodeStyle();
+    if (debugLayer) renderDebugOutlines(); // keep the overlay current
+  }
+
   document.getElementById('settings-btn').addEventListener('click', () => {
     stopApprox(); // editing settings cancels a running approximation
     nodeCountInput.value = N;
@@ -1159,6 +1215,7 @@
     workingLayers = layers.map(l => ({ ...l }));
     renderLayerRows();
     closeLoopInput.checked = closeLoop;
+    nodeStyleSel.value = nodeStyle;
     settingsDialog.showModal();
   });
   document.getElementById('cancel-settings').addEventListener('click', () => {
@@ -1167,10 +1224,8 @@
   document.getElementById('apply-settings').addEventListener('click', () => {
     settingsDialog.close();
 
-    // Layer and ring changes only redraw edges, so they apply without a reset
-    layers = workingLayers.map(l => ({ ...l }));
-    closeLoop = closeLoopInput.checked;
-    saveLayers();
+    // Layer, ring and style changes only redraw, so they apply without a reset
+    commitSettings();
     rebuildEdges();
     scheduleHashUpdate();
 
@@ -1235,6 +1290,7 @@
       });
       const slot = DENSE / members.length;
       trackers.push({
+        layerIndex: li,
         outline,
         members,
         base: members.map((_, k) => Math.round(k * slot)),
@@ -1351,13 +1407,21 @@
     });
   }
 
+  // Approximate destroys the current drawing, so it warns first; the
+  // settings dialog stays open underneath so Cancel returns to it.
+  const confirmApproxDialog = document.getElementById('confirm-approx');
   approximateBtn.addEventListener('click', () => {
+    confirmApproxDialog.showModal();
+  });
+  document.getElementById('cancel-approx').addEventListener('click', () => {
+    confirmApproxDialog.close();
+  });
+  document.getElementById('do-approx').addEventListener('click', () => {
+    confirmApproxDialog.close();
     settingsDialog.close();
     // commit the dialog's settings; the node count applies without the
-    // usual warning because approximation starts with a reset anyway
-    layers = workingLayers.map(l => ({ ...l }));
-    closeLoop = closeLoopInput.checked;
-    saveLayers();
+    // usual reset warning because this warning covered it
+    commitSettings();
     const raw = parseInt(nodeCountInput.value, 10);
     if (Number.isFinite(raw)) {
       const count = Math.max(MIN_NODES, Math.min(MAX_NODES, raw));
@@ -1366,6 +1430,51 @@
     rebuildEdges();
     scheduleHashUpdate();
     startApprox();
+  });
+
+  // ---- Debug view: dashed target outlines in their layer colors ----
+  const debugBtn = document.getElementById('debug-btn');
+  let debugLayer = null;
+
+  function removeDebugOutlines() {
+    if (debugLayer) {
+      debugLayer.remove();
+      debugLayer = null;
+    }
+    debugBtn.classList.remove('active');
+  }
+
+  function renderDebugOutlines() {
+    removeDebugOutlines();
+    const trackers = computeTargets();
+    if (!trackers) return;
+    debugLayer = make('g', { class: 'debug-outlines' });
+    for (const tr of trackers) {
+      debugLayer.appendChild(make('polygon', {
+        points: tr.outline.map(p => p.join(',')).join(' '),
+        fill: 'none',
+        stroke: PRESETS[layers[tr.layerIndex].color],
+        'stroke-width': 2,
+        'stroke-dasharray': '6 4',
+      }));
+    }
+    svg.appendChild(debugLayer);
+    debugBtn.classList.add('active');
+  }
+
+  debugBtn.addEventListener('click', () => {
+    if (debugLayer) removeDebugOutlines();
+    else renderDebugOutlines();
+  });
+
+  // ---- Hide nodes: edges-only view ----
+  const toggleNodesBtn = document.getElementById('toggle-nodes');
+  let nodesHidden = false;
+  toggleNodesBtn.addEventListener('click', () => {
+    nodesHidden = !nodesHidden;
+    nodesLayer.style.display = nodesHidden ? 'none' : '';
+    toggleNodesBtn.textContent = nodesHidden ? 'Show nodes' : 'Hide nodes';
+    toggleNodesBtn.classList.toggle('active', nodesHidden);
   });
 
   // ---- Dragging via pointer events (mouse + touch) ----
