@@ -1248,24 +1248,29 @@
     const pictured = [];
     layers.forEach((l, i) => { if (l.pic && validPic(l.pic)) pictured.push(i); });
     if (!pictured.length) return null;
-    // All pictures overlap: same place, same size. Each layer assigns its
-    // members a home stretch of its outline (in chain order), but a node
-    // is pulled toward the NEAREST outline point within a window around
-    // that home stretch, not a fixed point. Nodes in several pictured
-    // layers average those pulls, so they settle where the outlines pass
-    // close to each other — which is what lets one set of points trace
-    // two images at once, approximately.
+    // All pictures overlap: same place, same size. Each node is OWNED by
+    // the last pictured layer containing it (odds -> first image, evens
+    // -> second, with the defaults), so every layer's chain traces its
+    // own image through adjacent owned nodes. The unavoidable cross-links
+    // of chains that alternate owners (all-nodes: 100 hops between the
+    // two outlines) are minimized by a global least-squares alignment of
+    // each later image's parameterization; at outline crossings they
+    // shrink to nothing.
     const rect = svg.getBoundingClientRect();
     const top = 56, pad = 24;
     const boxW = rect.width - pad * 2;
     const boxH = rect.height - top - pad * 2;
     const DENSE = 512;
+    const owner = new Array(N).fill(-1);
+    for (const li of pictured) {
+      for (let i = 0; i < N; i++) {
+        if (TYPES[layers[li].type].member(i + 1)) owner[i] = li;
+      }
+    }
     const trackers = [];
     pictured.forEach(li => {
       const members = [];
-      for (let i = 0; i < N; i++) {
-        if (TYPES[layers[li].type].member(i + 1)) members.push(i);
-      }
+      for (let i = 0; i < N; i++) if (owner[i] === li) members.push(i);
       if (!members.length) return;
       const pts = picPoints(layers[li].pic);
       const w = Math.max(...pts.map(p => p[0]));
@@ -1293,12 +1298,49 @@
         layerIndex: li,
         outline,
         members,
-        base: members.map((_, k) => Math.round(k * slot)),
+        slot,
+        base: members.map((_, k) => Math.round(k * slot) % DENSE),
         drift: Math.max(2, Math.ceil(slot * 1.5)),
-        wrap: closeLoop && members.length > 2 ? 1 : 0,
       });
     });
-    return trackers.length ? trackers : null;
+    if (!trackers.length) return null;
+
+    // Align every later image's parameterization to the first: pick the
+    // rotation offset and direction that minimize the summed squared
+    // length of the cross-links between a member and its node-index
+    // neighbors owned by the first tracker. This turns the unavoidable
+    // hops between the two outlines into the shortest, most orderly set
+    // the geometry allows.
+    const first = trackers[0];
+    const targetOf = new Map();
+    first.members.forEach((idx, k) => { targetOf.set(idx, first.outline[first.base[k]]); });
+    for (let t = 1; t < trackers.length; t++) {
+      const tr = trackers[t];
+      const M = tr.members.length;
+      const anchors = tr.members.map(idx => {
+        let lo = null, hi = null;
+        for (let i = idx - 1; i >= 0 && !lo; i--) lo = targetOf.get(i) || null;
+        for (let i = idx + 1; i < N && !hi; i++) hi = targetOf.get(i) || null;
+        if (lo && hi) return [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2];
+        return lo || hi || null;
+      });
+      let best = { cost: Infinity, j0: 0, dir: 1 };
+      for (const dir of [1, -1]) {
+        for (let j0 = 0; j0 < DENSE; j0 += 4) {
+          let cost = 0;
+          for (let k = 0; k < M; k++) {
+            const a = anchors[k];
+            if (!a) continue;
+            const p = tr.outline[((j0 + dir * Math.round(k * tr.slot)) % DENSE + DENSE) % DENSE];
+            cost += (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
+          }
+          if (cost < best.cost) best = { cost, j0, dir };
+        }
+      }
+      tr.base = tr.members.map((_, k) =>
+        ((best.j0 + best.dir * Math.round(k * tr.slot)) % DENSE + DENSE) % DENSE);
+    }
+    return trackers;
   }
 
   function stopApprox() {
@@ -1345,11 +1387,10 @@
       // connectors — they may cross gaps without being punished, which
       // is what lets one chain trace an image while a sub-chain traces
       // another. A weak node-level pull keeps ordering and coverage.
-      // The fit lives in the edge-coverage term; the node-level pull is
-      // only a faint anchor so nodes whose segments win no coverage
-      // (slack stretches) don't freeze in place. Anything stronger pins
-      // nodes onto the outline and defeats the edge-based fit.
-      const NODE_W = 0.1, COVER_W = 1, EDGE_WINDOW = 3;
+      // Owned nodes settle onto their own image's outline: the nearest
+      // outline point within a window around their home stretch, so they
+      // can slide along the contour (and onto outline crossings, where
+      // the cross-links of mixed chains vanish).
       const pullX = new Float64Array(N);
       const pullY = new Float64Array(N);
       const pullW = new Float64Array(N);
@@ -1363,42 +1404,10 @@
             const d = (p[0] - node.x) ** 2 + (p[1] - node.y) ** 2;
             if (d < bestD) { bestD = d; bx = p[0]; by = p[1]; }
           }
-          pullX[idx] += (bx - node.x) * NODE_W;
-          pullY[idx] += (by - node.y) * NODE_W;
-          pullW[idx] += NODE_W;
+          pullX[idx] += bx - node.x;
+          pullY[idx] += by - node.y;
+          pullW[idx] += 1;
         });
-        const M = tr.members.length;
-        const edgeCount = M - 1 + tr.wrap;
-        const slot = L / M;
-        for (let j = 0; j < L; j++) {
-          const s = tr.outline[j];
-          // candidate segments: those whose home stretch is near this sample
-          const kc = Math.floor(j / slot);
-          let bestD = Infinity, bk = -1, bt = 0, bpx = 0, bpy = 0;
-          for (let o = -EDGE_WINDOW; o <= EDGE_WINDOW; o++) {
-            const k = tr.wrap ? ((kc + o) % edgeCount + edgeCount) % edgeCount
-              : Math.min(edgeCount - 1, Math.max(0, kc + o));
-            const a = nodes[tr.members[k]];
-            const b = nodes[tr.members[(k + 1) % M]];
-            const vx = b.x - a.x, vy = b.y - a.y;
-            const len2 = vx * vx + vy * vy || 1;
-            const t = Math.max(0, Math.min(1,
-              ((s[0] - a.x) * vx + (s[1] - a.y) * vy) / len2));
-            const px = a.x + vx * t, py = a.y + vy * t;
-            const d = (s[0] - px) ** 2 + (s[1] - py) ** 2;
-            if (d < bestD) { bestD = d; bk = k; bt = t; bpx = px; bpy = py; }
-          }
-          if (bk < 0) continue;
-          const w = COVER_W / slot; // normalize: L samples share M slots
-          const cx = (s[0] - bpx) * w, cy = (s[1] - bpy) * w;
-          const ai = tr.members[bk], bi = tr.members[(bk + 1) % M];
-          pullX[ai] += cx * (1 - bt);
-          pullY[ai] += cy * (1 - bt);
-          pullW[ai] += w * (1 - bt);
-          pullX[bi] += cx * bt;
-          pullY[bi] += cy * bt;
-          pullW[bi] += w * bt;
-        }
       }
       maxMove = 0;
       for (let i = 0; i < N; i++) {
