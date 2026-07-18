@@ -149,14 +149,17 @@ function check(name, ok, detail) {
       BINARY_FIXTURE_POSITIONS.every((p, i) => state.transforms[i] === expectTransform(p)));
   }
 
-  // --- Hash takes priority over stored state ---
+  // --- A hash differing from stored state prompts, and Load applies it ---
   await page.evaluate(([key, json]) => {
     localStorage.setItem(key, json);
   }, [STORAGE_KEY, LEGACY_STORAGE_JSON]);
   await page.goto(`${APP_URL}#${LEGACY_HASH}`);
   await page.reload();
+  const prompted = await page.evaluate(() => document.getElementById('confirm-load').open);
+  check('differing hash prompts before replacing saved state', prompted);
+  await page.click('#load-link');
   state = await readState();
-  check('hash beats localStorage', state.count === 10, `(got ${state.count})`);
+  check('confirmed load applies the hash state', state.count === 10, `(got ${state.count})`);
 
   // --- Invalid old data falls back to the default circle, no crash ---
   const errors = [];
