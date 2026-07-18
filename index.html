@@ -1193,50 +1193,64 @@
     const pictured = [];
     layers.forEach((l, i) => { if (l.pic && validPic(l.pic)) pictured.push(i); });
     if (!pictured.length) return null;
-    // each node follows the picture of the LAST pictured layer containing
-    // it, so overlapping memberships (all vs even) don't fight each other
-    const controller = new Array(N).fill(-1);
-    for (const li of pictured) {
-      for (let i = 0; i < N; i++) {
-        if (TYPES[layers[li].type].member(i + 1)) controller[i] = li;
-      }
-    }
-    // pictures sit side by side in equal-width slots below the toolbar
+    // All pictures overlap: same place, same size. Each layer assigns its
+    // members a home stretch of its outline (in chain order), but a node
+    // is pulled toward the NEAREST outline point within a window around
+    // that home stretch, not a fixed point. Nodes in several pictured
+    // layers average those pulls, so they settle where the outlines pass
+    // close to each other — which is what lets one set of points trace
+    // two images at once, approximately.
     const rect = svg.getBoundingClientRect();
     const top = 56, pad = 24;
-    const slotW = (rect.width - pad * 2) / pictured.length;
-    const slotH = rect.height - top - pad * 2;
-    const targets = new Array(N).fill(null);
-    pictured.forEach((li, slot) => {
+    const boxW = rect.width - pad * 2;
+    const boxH = rect.height - top - pad * 2;
+    const DENSE = 512;
+    const trackers = [];
+    pictured.forEach(li => {
       const members = [];
-      for (let i = 0; i < N; i++) if (controller[i] === li) members.push(i);
+      for (let i = 0; i < N; i++) {
+        if (TYPES[layers[li].type].member(i + 1)) members.push(i);
+      }
       if (!members.length) return;
       const pts = picPoints(layers[li].pic);
       const w = Math.max(...pts.map(p => p[0]));
       const h = Math.max(...pts.map(p => p[1]));
-      const scale = Math.min((slotW * 0.9) / (w || 1), slotH / (h || 1));
-      const ox = pad + slotW * slot + (slotW - w * scale) / 2;
-      const oy = top + pad + (slotH - h * scale) / 2;
-      const sampled = resamplePoints(pts, members.length);
-      // align contours across pictures: start at the topmost point and
-      // wind the same way, so chains that alternate between two shapes
-      // (like all-nodes vs evens) sweep both outlines in sync instead
-      // of criss-crossing the whole canvas
+      const scale = Math.min(boxW / (w || 1), boxH / (h || 1));
+      const ox = pad + (boxW - w * scale) / 2;
+      const oy = top + pad + (boxH - h * scale) / 2;
+      const sampled = resamplePoints(pts, DENSE);
+      // align contours: start at the topmost point and wind the same
+      // way, so members' home stretches correspond to similar spots on
+      // every overlapping outline
       let start = 0;
       let area = 0;
-      for (let k = 0; k < sampled.length; k++) {
+      for (let k = 0; k < DENSE; k++) {
         if (sampled[k][1] < sampled[start][1]) start = k;
-        const a = sampled[k], b = sampled[(k + 1) % sampled.length];
+        const a = sampled[k], b = sampled[(k + 1) % DENSE];
         area += a[0] * b[1] - b[0] * a[1];
       }
-      const n = sampled.length;
-      const oriented = sampled.map((_, k) =>
-        sampled[(start + (area < 0 ? n - k : k)) % n]);
-      members.forEach((idx, k) => {
-        targets[idx] = [ox + oriented[k][0] * scale, oy + oriented[k][1] * scale];
+      const outline = sampled.map((_, k) => {
+        const p = sampled[(start + (area < 0 ? DENSE - k : k)) % DENSE];
+        return [ox + p[0] * scale, oy + p[1] * scale];
+      });
+      const slot = DENSE / members.length;
+      trackers.push({
+        outline,
+        members,
+        base: members.map((_, k) => Math.round(k * slot)),
+        drift: Math.max(2, Math.ceil(slot * 1.5)),
       });
     });
-    return targets;
+    if (!trackers.length) return null;
+    // where outlines diverge, a shared node can't sit on both — bias it
+    // toward its LAST pictured layer (weight 2:1) so that layer's chain
+    // stays recognizable instead of both blurring into a midway blend
+    const lastTracker = new Array(N).fill(-1);
+    trackers.forEach((tr, ti) => tr.members.forEach(idx => { lastTracker[idx] = ti; }));
+    trackers.forEach((tr, ti) => {
+      tr.weights = tr.members.map(idx => (lastTracker[idx] === ti ? 2 : 1));
+    });
+    return trackers;
   }
 
   function stopApprox() {
@@ -1247,14 +1261,15 @@
 
   async function startApprox() {
     stopApprox();
-    const targets = computeTargets();
-    if (!targets) return;
+    const trackers = computeTargets();
+    if (!trackers) return;
     layoutCircle(); // start from a clean reset, as advertised
     redrawAll();
     approx.running = true;
     approx.paused = false;
     approxPauseBtn.textContent = 'Pause';
     approxBar.hidden = false;
+    window.__approxTrackers = trackers; // observability for tests
     const gen = approx.gen;
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -1269,14 +1284,32 @@
       while (approx.paused && gen === approx.gen) await sleep(100);
       if (gen !== approx.gen) return;
 
+      const pullX = new Float64Array(N);
+      const pullY = new Float64Array(N);
+      const pulls = new Float64Array(N);
+      for (const tr of trackers) {
+        const L = tr.outline.length;
+        tr.members.forEach((idx, k) => {
+          const node = nodes[idx];
+          let bestD = Infinity, bx = 0, by = 0;
+          for (let o = -tr.drift; o <= tr.drift; o++) {
+            const p = tr.outline[(tr.base[k] + o + L) % L];
+            const d = (p[0] - node.x) ** 2 + (p[1] - node.y) ** 2;
+            if (d < bestD) { bestD = d; bx = p[0]; by = p[1]; }
+          }
+          const w = tr.weights[k];
+          pullX[idx] += (bx - node.x) * w;
+          pullY[idx] += (by - node.y) * w;
+          pulls[idx] += w;
+        });
+      }
       maxMove = 0;
       for (let i = 0; i < N; i++) {
-        const t = targets[i];
-        if (!t) continue;
+        if (!pulls[i]) continue;
         const ang = Math.random() * 2 * Math.PI;
         const mag = Math.random() * noiseMag;
-        const mx = ALPHA * (t[0] - nodes[i].x) + Math.cos(ang) * mag;
-        const my = ALPHA * (t[1] - nodes[i].y) + Math.sin(ang) * mag;
+        const mx = ALPHA * pullX[i] / pulls[i] + Math.cos(ang) * mag;
+        const my = ALPHA * pullY[i] / pulls[i] + Math.sin(ang) * mag;
         nodes[i].x += mx;
         nodes[i].y += my;
         maxMove = Math.max(maxMove, Math.hypot(mx, my));
