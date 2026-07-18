@@ -199,6 +199,14 @@
     stroke: none;
   }
   .debug-outlines { pointer-events: none; }
+  #version {
+    position: fixed;
+    bottom: 6px;
+    right: 10px;
+    font-size: 11px;
+    color: #565b6b;
+    pointer-events: none;
+  }
   dialog .actions {
     display: flex;
     justify-content: flex-end;
@@ -317,8 +325,14 @@
   <g id="edges"></g>
   <g id="nodes"></g>
 </svg>
+<div id="version"></div>
 <script>
 (async function () {
+  // CI stamps the deployed version over this placeholder
+  const APP_VERSION = '1.0.0';
+  document.getElementById('version').textContent =
+    APP_VERSION.indexOf('__') === 0 ? 'dev' : 'v' + APP_VERSION;
+
   const svg = document.getElementById('canvas');
   const edgesLayer = document.getElementById('edges');
   const nodesLayer = document.getElementById('nodes');
