@@ -368,7 +368,7 @@
   // longest dimension spans 0..1 (aspect preserved). Sources:
   // tiger: OpenMoji 1F405 (CC BY-SA 4.0, openmoji.org), woman:
   // Font Awesome Free person-dress (CC BY 4.0, fontawesome.com);
-  // outlines extracted via the same pipeline as extractContour().
+  // outlines extracted via the same pipeline as extractPicture().
   const BUILTIN_PICS = {
     tiger: { label: 'Tiger', points: [[0.503,0],[0.49,0.005],[0.473,0.005],[0.457,0.006],[0.443,0.01],[0.426,0.01],[0.414,0.015],[0.396,0.015],[0.384,0.02],[0.367,0.02],[0.35,0.02],[0.332,0.02],[0.315,0.02],[0.298,0.02],[0.28,0.02],[0.268,0.025],[0.251,0.025],[0.238,0.03],[0.226,0.036],[0.213,0.04],[0.197,0.041],[0.179,0.041],[0.162,0.041],[0.15,0.036],[0.137,0.03],[0.12,0.03],[0.107,0.034],[0.096,0.041],[0.086,0.049],[0.081,0.061],[0.074,0.071],[0.067,0.081],[0.061,0.093],[0.051,0.1],[0.041,0.107],[0.03,0.114],[0.021,0.122],[0.015,0.134],[0.01,0.146],[0.01,0.163],[0.005,0.175],[0.005,0.193],[0,0.205],[0,0.222],[0.001,0.239],[0.008,0.249],[0.015,0.259],[0.025,0.266],[0.04,0.269],[0.052,0.274],[0.07,0.274],[0.082,0.269],[0.094,0.264],[0.106,0.259],[0.117,0.252],[0.131,0.249],[0.148,0.249],[0.165,0.249],[0.168,0.264],[0.168,0.281],[0.168,0.299],[0.157,0.306],[0.149,0.315],[0.142,0.325],[0.132,0.332],[0.122,0.34],[0.115,0.35],[0.107,0.359],[0.096,0.366],[0.091,0.379],[0.086,0.391],[0.079,0.401],[0.072,0.411],[0.071,0.428],[0.071,0.445],[0.076,0.457],[0.081,0.469],[0.086,0.482],[0.098,0.487],[0.11,0.492],[0.128,0.492],[0.142,0.49],[0.152,0.482],[0.162,0.475],[0.166,0.462],[0.168,0.446],[0.173,0.433],[0.178,0.421],[0.188,0.414],[0.197,0.406],[0.209,0.401],[0.218,0.392],[0.229,0.386],[0.241,0.381],[0.253,0.376],[0.261,0.365],[0.278,0.365],[0.295,0.365],[0.305,0.373],[0.31,0.386],[0.31,0.403],[0.31,0.42],[0.31,0.438],[0.305,0.45],[0.305,0.467],[0.305,0.485],[0.309,0.497],[0.315,0.509],[0.325,0.516],[0.336,0.523],[0.353,0.523],[0.365,0.518],[0.378,0.513],[0.386,0.504],[0.391,0.491],[0.394,0.477],[0.396,0.462],[0.401,0.45],[0.401,0.432],[0.406,0.42],[0.406,0.403],[0.406,0.385],[0.406,0.368],[0.406,0.351],[0.406,0.333],[0.406,0.316],[0.412,0.305],[0.429,0.305],[0.442,0.299],[0.459,0.299],[0.476,0.299],[0.489,0.294],[0.506,0.294],[0.518,0.289],[0.533,0.287],[0.548,0.284],[0.565,0.284],[0.582,0.284],[0.594,0.29],[0.597,0.305],[0.599,0.32],[0.604,0.332],[0.609,0.344],[0.615,0.355],[0.619,0.369],[0.625,0.381],[0.635,0.388],[0.635,0.405],[0.635,0.423],[0.631,0.437],[0.629,0.452],[0.624,0.465],[0.624,0.482],[0.619,0.494],[0.624,0.506],[0.63,0.518],[0.643,0.523],[0.655,0.528],[0.667,0.533],[0.68,0.529],[0.692,0.523],[0.701,0.514],[0.706,0.503],[0.711,0.49],[0.716,0.478],[0.721,0.465],[0.726,0.453],[0.731,0.441],[0.734,0.426],[0.741,0.416],[0.741,0.399],[0.745,0.386],[0.763,0.386],[0.78,0.386],[0.792,0.391],[0.802,0.398],[0.812,0.405],[0.822,0.413],[0.831,0.421],[0.833,0.437],[0.838,0.449],[0.838,0.467],[0.839,0.482],[0.848,0.491],[0.854,0.503],[0.866,0.508],[0.878,0.513],[0.896,0.513],[0.908,0.508],[0.92,0.503],[0.929,0.494],[0.939,0.487],[0.939,0.47],[0.94,0.462],[0.939,0.445],[0.939,0.428],[0.939,0.41],[0.947,0.401],[0.959,0.396],[0.972,0.391],[0.98,0.382],[0.986,0.371],[0.995,0.362],[0.995,0.345],[1,0.333],[0.99,0.325],[0.975,0.326],[0.97,0.339],[0.964,0.351],[0.957,0.36],[0.939,0.36],[0.922,0.36],[0.91,0.355],[0.903,0.345],[0.898,0.332],[0.893,0.32],[0.893,0.302],[0.893,0.285],[0.888,0.273],[0.888,0.255],[0.883,0.243],[0.881,0.228],[0.878,0.214],[0.873,0.201],[0.868,0.189],[0.863,0.177],[0.858,0.165],[0.853,0.152],[0.848,0.14],[0.843,0.128],[0.836,0.117],[0.827,0.108],[0.822,0.096],[0.812,0.089],[0.803,0.081],[0.795,0.071],[0.787,0.062],[0.777,0.055],[0.766,0.048],[0.757,0.041],[0.744,0.036],[0.732,0.03],[0.72,0.025],[0.708,0.02],[0.695,0.015],[0.683,0.01],[0.67,0.006],[0.653,0.005],[0.636,0.005],[0.624,0],[0.607,0],[0.589,0],[0.572,0],[0.555,0],[0.537,0],[0.52,0]] },
     woman: { label: 'Woman', points: [[0.458,0],[0.445,0.006],[0.426,0.006],[0.408,0.006],[0.395,0.012],[0.376,0.012],[0.363,0.018],[0.35,0.024],[0.337,0.03],[0.324,0.036],[0.311,0.042],[0.298,0.048],[0.286,0.055],[0.274,0.062],[0.265,0.071],[0.252,0.077],[0.244,0.089],[0.232,0.096],[0.225,0.107],[0.214,0.116],[0.205,0.125],[0.196,0.136],[0.19,0.149],[0.179,0.156],[0.173,0.169],[0.164,0.179],[0.155,0.189],[0.149,0.201],[0.137,0.209],[0.131,0.221],[0.125,0.234],[0.116,0.244],[0.107,0.254],[0.101,0.267],[0.089,0.274],[0.083,0.287],[0.075,0.298],[0.068,0.31],[0.06,0.32],[0.054,0.333],[0.042,0.34],[0.036,0.353],[0.027,0.363],[0.018,0.373],[0.012,0.386],[0.005,0.399],[0,0.412],[0,0.431],[0,0.45],[0.006,0.463],[0.012,0.476],[0.019,0.488],[0.03,0.496],[0.042,0.503],[0.058,0.506],[0.071,0.512],[0.09,0.512],[0.103,0.506],[0.119,0.503],[0.129,0.494],[0.137,0.483],[0.149,0.476],[0.162,0.47],[0.18,0.47],[0.199,0.47],[0.202,0.486],[0.202,0.505],[0.202,0.524],[0.196,0.537],[0.19,0.55],[0.185,0.563],[0.18,0.577],[0.179,0.595],[0.173,0.608],[0.167,0.621],[0.161,0.634],[0.157,0.649],[0.16,0.661],[0.161,0.679],[0.173,0.686],[0.185,0.693],[0.2,0.696],[0.219,0.696],[0.238,0.696],[0.257,0.696],[0.262,0.71],[0.262,0.729],[0.262,0.748],[0.262,0.767],[0.262,0.786],[0.262,0.805],[0.262,0.824],[0.262,0.842],[0.262,0.861],[0.262,0.88],[0.262,0.899],[0.262,0.918],[0.262,0.937],[0.262,0.956],[0.262,0.975],[0.262,0.994],[0.275,1],[0.294,1],[0.313,1],[0.331,1],[0.35,1],[0.369,1],[0.388,1],[0.407,1],[0.426,1],[0.429,0.984],[0.429,0.965],[0.429,0.946],[0.429,0.927],[0.429,0.908],[0.429,0.889],[0.429,0.87],[0.429,0.851],[0.429,0.832],[0.429,0.813],[0.429,0.794],[0.429,0.775],[0.429,0.756],[0.429,0.737],[0.429,0.719],[0.429,0.7],[0.444,0.696],[0.463,0.696],[0.482,0.696],[0.501,0.696],[0.512,0.705],[0.512,0.723],[0.512,0.742],[0.512,0.761],[0.512,0.78],[0.512,0.799],[0.512,0.818],[0.512,0.837],[0.512,0.856],[0.512,0.875],[0.512,0.894],[0.512,0.913],[0.512,0.932],[0.512,0.951],[0.512,0.969],[0.512,0.988],[0.519,1],[0.538,1],[0.557,1],[0.576,1],[0.595,1],[0.614,1],[0.633,1],[0.652,1],[0.671,1],[0.679,0.989],[0.679,0.97],[0.679,0.951],[0.679,0.932],[0.679,0.913],[0.679,0.894],[0.679,0.875],[0.679,0.856],[0.679,0.838],[0.679,0.819],[0.679,0.8],[0.679,0.781],[0.679,0.762],[0.679,0.743],[0.679,0.724],[0.679,0.705],[0.689,0.696],[0.708,0.696],[0.727,0.696],[0.746,0.696],[0.759,0.69],[0.772,0.685],[0.78,0.674],[0.786,0.661],[0.78,0.648],[0.778,0.631],[0.774,0.616],[0.768,0.603],[0.762,0.59],[0.756,0.577],[0.755,0.56],[0.75,0.545],[0.744,0.532],[0.738,0.519],[0.738,0.5],[0.738,0.481],[0.746,0.47],[0.765,0.47],[0.784,0.47],[0.797,0.476],[0.804,0.488],[0.815,0.495],[0.824,0.506],[0.839,0.509],[0.856,0.512],[0.875,0.512],[0.888,0.506],[0.901,0.5],[0.914,0.494],[0.923,0.484],[0.929,0.471],[0.935,0.458],[0.94,0.445],[0.94,0.426],[0.94,0.407],[0.935,0.394],[0.929,0.381],[0.922,0.369],[0.911,0.361],[0.905,0.348],[0.895,0.339],[0.887,0.328],[0.881,0.316],[0.869,0.309],[0.863,0.296],[0.854,0.286],[0.847,0.274],[0.839,0.263],[0.833,0.25],[0.821,0.243],[0.815,0.23],[0.806,0.22],[0.798,0.21],[0.792,0.197],[0.785,0.185],[0.774,0.177],[0.768,0.164],[0.758,0.155],[0.75,0.144],[0.744,0.131],[0.732,0.124],[0.724,0.113],[0.714,0.104],[0.704,0.095],[0.696,0.084],[0.684,0.077],[0.673,0.07],[0.664,0.06],[0.651,0.054],[0.638,0.048],[0.625,0.042],[0.613,0.035],[0.601,0.027],[0.586,0.024],[0.573,0.018],[0.56,0.012],[0.542,0.011],[0.528,0.006],[0.509,0.006],[0.49,0.006],[0.477,0]] },
@@ -377,24 +377,36 @@
   function validPic(p) {
     if (!p || typeof p !== 'object') return false;
     if (p.builtin) return Object.prototype.hasOwnProperty.call(BUILTIN_PICS, p.builtin);
-    return typeof p.name === 'string' &&
-      Array.isArray(p.points) && p.points.length >= 8 && p.points.length <= 2048 &&
-      p.points.every(q => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+    if (typeof p.name !== 'string') return false;
+    const validPts = (pts, min) => Array.isArray(pts) &&
+      pts.length >= min && pts.length <= 2048 &&
+      pts.every(q => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1]));
+    if (p.points) return validPts(p.points, 8); // legacy single outline
+    return Array.isArray(p.strokes) && p.strokes.length >= 1 && p.strokes.length <= 64 &&
+      p.strokes[0].closed === true && validPts(p.strokes[0].pts, 8) &&
+      p.strokes.every(st => st && typeof st === 'object' && validPts(st.pts, 2));
   }
 
-  function picPoints(pic) {
-    return pic.builtin ? BUILTIN_PICS[pic.builtin].points : pic.points;
+  // every picture is a list of strokes; the first is the closed outline,
+  // later ones are open interior lines. Legacy pics carry a bare points
+  // array, built-ins reference the embedded contours.
+  function picStrokes(pic) {
+    if (pic.builtin) return [{ closed: true, pts: BUILTIN_PICS[pic.builtin].points }];
+    if (pic.points) return [{ closed: true, pts: pic.points }];
+    return pic.strokes;
   }
 
   function picLabel(pic) {
     return pic.builtin ? BUILTIN_PICS[pic.builtin].label : pic.name;
   }
 
-  // resample a closed polygon to n points by arc length
-  function resamplePoints(points, n) {
+  // resample a stroke to n points by arc length; closed strokes wrap,
+  // open strokes keep both endpoints
+  function resampleStroke(points, n, closed) {
+    const segs = closed ? points.length : points.length - 1;
     const per = [];
     let total = 0;
-    for (let i = 0; i < points.length; i++) {
+    for (let i = 0; i < segs; i++) {
       const a = points[i], b = points[(i + 1) % points.length];
       per.push(total);
       total += Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -402,24 +414,27 @@
     const out = [];
     let seg = 0;
     for (let k = 0; k < n; k++) {
-      const target = (k / n) * total;
-      while (seg < points.length - 1 && per[seg + 1] <= target) seg++;
+      const target = closed ? (k / n) * total : (k / (n - 1)) * total;
+      while (seg < segs - 1 && per[seg + 1] <= target) seg++;
       const a = points[seg], b = points[(seg + 1) % points.length];
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-      const t = (target - per[seg]) / len;
+      const t = Math.min(1, (target - per[seg]) / len);
       out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
     }
     return out;
   }
 
-  // Image -> outline contour extraction. This exact code is embedded in
-  // index.html (extractContour) and reused by the offline generator.
-  // Pipeline: rasterize to a small canvas, threshold (alpha if the image
-  // has transparency, darkness otherwise), morphological closing (fuses
-  // small gaps like a head above shoulders), boundary-edge cycle tracing
-  // of the largest contour, arc-length resampling, normalization (max
-  // dimension spans 0..1, aspect preserved).
-  async function extractContour(imgSrc, gridSize, samples) {
+  // Image -> picture extraction: detect the main object, then recreate
+  // its outline AND its main interior lines as strokes.
+  // 1. Object mask: alpha when the image has transparency; otherwise the
+  //    background color is estimated from the image border and pixels far
+  //    from it (Otsu threshold on the distance map) are the object — this
+  //    handles bright objects on dark photos as well as the reverse.
+  // 2. Morphological closing, largest connected component, boundary-cycle
+  //    trace -> the closed outline stroke.
+  // 3. Interior: Sobel edges inside the eroded mask, then a Hough search
+  //    for the dominant straight segments -> open line strokes.
+  async function extractPicture(imgSrc, gridSize, samples) {
     gridSize = gridSize || 200;
     samples = samples || 256;
     const img = await new Promise((resolve, reject) => {
@@ -443,24 +458,60 @@
       if (data[i] < 250) { hasAlpha = true; break; }
     }
     let mask = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
-      mask[i] = hasAlpha ? (a > 128 ? 1 : 0) : ((r + g + b) < 690 ? 1 : 0);
+    if (hasAlpha) {
+      for (let i = 0; i < w * h; i++) mask[i] = data[i * 4 + 3] > 128 ? 1 : 0;
+    } else {
+      // background model: median color of the border ring
+      const ring = { r: [], g: [], b: [] };
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (x > 1 && x < w - 2 && y > 1 && y < h - 2) continue;
+          const i = (y * w + x) * 4;
+          ring.r.push(data[i]);
+          ring.g.push(data[i + 1]);
+          ring.b.push(data[i + 2]);
+        }
+      }
+      const med = a => a.sort((p, q) => p - q)[a.length >> 1];
+      const br = med(ring.r), bg = med(ring.g), bb = med(ring.b);
+      // distance-to-background map, thresholded by Otsu
+      const dist = new Uint8Array(w * h);
+      const hist = new Int32Array(256);
+      for (let i = 0; i < w * h; i++) {
+        const d = Math.min(255, Math.round((
+          Math.abs(data[i * 4] - br) +
+          Math.abs(data[i * 4 + 1] - bg) +
+          Math.abs(data[i * 4 + 2] - bb)) / 3));
+        dist[i] = d;
+        hist[d]++;
+      }
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0, wB = 0, best = 0, thr = 32;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (!wB || wB === w * h) continue;
+        sumB += t * hist[t];
+        const mB = sumB / wB, mF = (sum - sumB) / (w * h - wB);
+        const between = wB * (w * h - wB) * (mB - mF) * (mB - mF);
+        if (between > best) { best = between; thr = t; }
+      }
+      for (let i = 0; i < w * h; i++) mask[i] = dist[i] > thr ? 1 : 0;
     }
 
     // morphological closing (box dilate then erode) to fuse nearby parts
     const rad = Math.max(2, Math.round(gridSize * 0.02));
-    const morph = (src, isDilate) => {
+    const morph = (src, isDilate, r) => {
       const out = new Uint8Array(w * h);
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           let val = isDilate ? 0 : 1;
-          for (let dy = -rad; dy <= rad; dy++) {
-            for (let dx = -rad; dx <= rad; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
               const nx = x + dx, ny = y + dy;
               const v = nx >= 0 && nx < w && ny >= 0 && ny < h ? src[ny * w + nx] : 0;
-              if (isDilate && v) { val = 1; dy = dx = rad + 1; }
-              if (!isDilate && !v) { val = 0; dy = dx = rad + 1; }
+              if (isDilate && v) { val = 1; dy = dx = r + 1; }
+              if (!isDilate && !v) { val = 0; dy = dx = r + 1; }
             }
           }
           out[y * w + x] = val;
@@ -468,14 +519,39 @@
       }
       return out;
     };
-    mask = morph(morph(mask, true), false);
+    mask = morph(morph(mask, true, rad), false, rad);
 
-    // Directed boundary edges of solid pixels, oriented so they always
-    // form closed cycles: top side right-to-left, bottom left-to-right,
-    // left side downwards, right side upwards. Walk the longest cycle.
+    // keep only the largest connected component — the main object
+    const comp = new Int32Array(w * h).fill(-1);
+    let bestComp = -1, bestSize = 0, nComp = 0;
+    const stack = [];
+    for (let seed = 0; seed < w * h; seed++) {
+      if (!mask[seed] || comp[seed] >= 0) continue;
+      let size = 0;
+      stack.push(seed);
+      comp[seed] = nComp;
+      while (stack.length) {
+        const i = stack.pop();
+        size++;
+        const x = i % w, y = (i / w) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          const j = ny * w + nx;
+          if (mask[j] && comp[j] < 0) { comp[j] = nComp; stack.push(j); }
+        }
+      }
+      if (size > bestSize) { bestSize = size; bestComp = nComp; }
+      nComp++;
+    }
+    if (bestComp < 0) return null;
+    for (let i = 0; i < w * h; i++) mask[i] = comp[i] === bestComp ? 1 : 0;
+
+    // trace the outline: directed boundary edges always form closed
+    // cycles; walk the longest one
     const solid = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? mask[y * w + x] : 0);
     const key = (x, y) => y * (w + 1) + x;
-    const edgesFrom = new Map(); // start vertex -> [end vertices]
+    const edgesFrom = new Map();
     const addEdge = (x1, y1, x2, y2) => {
       const k = key(x1, y1);
       if (!edgesFrom.has(k)) edgesFrom.set(k, []);
@@ -490,7 +566,7 @@
         if (!solid(x + 1, y)) addEdge(x + 1, y + 1, x + 1, y);
       }
     }
-    let best = null;
+    let bestCycle = null;
     for (const [startKey] of edgesFrom) {
       while (edgesFrom.get(startKey) && edgesFrom.get(startKey).length) {
         const cycle = [];
@@ -502,39 +578,113 @@
           k = outs.pop();
           if (k === startKey) break;
         }
-        if (!best || cycle.length > best.length) best = cycle;
+        if (!bestCycle || cycle.length > bestCycle.length) bestCycle = cycle;
       }
     }
-    if (!best || best.length < 8) return null;
-    const pts = best.map(k => [k % (w + 1), Math.floor(k / (w + 1))]);
+    if (!bestCycle || bestCycle.length < 8) return null;
+    const outlinePts = bestCycle.map(k => [k % (w + 1), Math.floor(k / (w + 1))]);
+    const outline = resampleStroke(outlinePts, samples, true);
 
-    // resample by arc length to a fixed count
-    const per = [];
-    let total = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length];
-      per.push(total);
-      total += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    // ---- interior main lines: Sobel edges + Hough segment search ----
+    const inner = morph(mask, false, 3); // stay clear of the outline itself
+    const lum = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
     }
-    const res = [];
-    let seg = 0;
-    for (let k = 0; k < samples; k++) {
-      const target = (k / samples) * total;
-      while (seg < pts.length - 1 && per[seg + 1] <= target) seg++;
-      const a = pts[seg], b = pts[(seg + 1) % pts.length];
-      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-      const t = (target - per[seg]) / segLen;
-      res.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    const ex = [], ey = [];
+    const mags = [];
+    const magAt = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (!inner[y * w + x]) continue;
+        const i = y * w + x;
+        const gx = lum[i - w + 1] + 2 * lum[i + 1] + lum[i + w + 1]
+          - lum[i - w - 1] - 2 * lum[i - 1] - lum[i + w - 1];
+        const gy = lum[i + w - 1] + 2 * lum[i + w] + lum[i + w + 1]
+          - lum[i - w - 1] - 2 * lum[i - w] - lum[i - w + 1];
+        const m = Math.hypot(gx, gy);
+        magAt[i] = m;
+        if (m > 24) mags.push(m);
+      }
+    }
+    const lines = [];
+    if (mags.length > 20) {
+      mags.sort((a, b) => b - a);
+      const thr = Math.max(24, mags[Math.min(mags.length - 1, Math.floor(w * h * 0.06))] || 24);
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (magAt[y * w + x] >= thr) { ex.push(x); ey.push(y); }
+        }
+      }
+      // Hough: accumulate, repeatedly take the strongest line, harvest its
+      // contiguous pixel runs as segments, remove those pixels
+      const TH = 90;
+      const cosT = [], sinT = [];
+      for (let t = 0; t < TH; t++) {
+        cosT.push(Math.cos(t * Math.PI / TH));
+        sinT.push(Math.sin(t * Math.PI / TH));
+      }
+      const D = Math.ceil(Math.hypot(w, h));
+      const nRho = D + 1;
+      const acc = new Int32Array(TH * nRho);
+      const rhoOf = (px, py, t) => Math.round((px * cosT[t] + py * sinT[t] + D) / 2);
+      const used = new Uint8Array(ex.length);
+      for (let p = 0; p < ex.length; p++) {
+        for (let t = 0; t < TH; t++) acc[t * nRho + rhoOf(ex[p], ey[p], t)]++;
+      }
+      const minSupport = Math.max(10, Math.round(gridSize * 0.06));
+      for (let iter = 0; iter < 60 && lines.length < 32; iter++) {
+        let bestA = 0, bestI = -1;
+        for (let i = 0; i < acc.length; i++) {
+          if (acc[i] > bestA) { bestA = acc[i]; bestI = i; }
+        }
+        if (bestA < minSupport) break;
+        const t = (bestI / nRho) | 0;
+        const rho = (bestI % nRho) * 2 - D;
+        const cands = [];
+        for (let p = 0; p < ex.length; p++) {
+          if (used[p]) continue;
+          if (Math.abs(ex[p] * cosT[t] + ey[p] * sinT[t] - rho) <= 2.5) cands.push(p);
+        }
+        // remove them from the accumulator whatever happens, so the next
+        // iteration finds a different line
+        for (const p of cands) {
+          used[p] = 1;
+          for (let tt = 0; tt < TH; tt++) acc[tt * nRho + rhoOf(ex[p], ey[p], tt)]--;
+        }
+        cands.sort((a, b) =>
+          (ex[a] * -sinT[t] + ey[a] * cosT[t]) - (ex[b] * -sinT[t] + ey[b] * cosT[t]));
+        let runStart = 0;
+        for (let c = 1; c <= cands.length; c++) {
+          const proj = p => ex[p] * -sinT[t] + ey[p] * cosT[t];
+          const gap = c < cands.length ? proj(cands[c]) - proj(cands[c - 1]) : Infinity;
+          if (gap > 5) {
+            const a = cands[runStart], b = cands[c - 1];
+            const len = proj(b) - proj(a);
+            if (len >= minSupport) {
+              lines.push([[ex[a], ey[a]], [ex[b], ey[b]]]);
+            }
+            runStart = c;
+          }
+        }
+      }
     }
 
-    // normalize: max dimension spans 0..1, aspect preserved
-    const xs = res.map(p => p[0]), ys = res.map(p => p[1]);
+    // normalize outline and lines together: max dimension spans 0..1
+    const all = outline.concat(...lines);
+    const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
     const minX = Math.min(...xs), minY = Math.min(...ys);
     const span = Math.max(Math.max(...xs) - minX, Math.max(...ys) - minY) || 1;
-    return res.map(p => [
+    const norm = p => [
       Math.round((p[0] - minX) / span * 1000) / 1000,
       Math.round((p[1] - minY) / span * 1000) / 1000,
-    ]);
+    ];
+    const strokes = [{ closed: true, pts: outline.map(norm) }];
+    lines.sort((a, b) =>
+      Math.hypot(b[1][0] - b[0][0], b[1][1] - b[0][1]) -
+      Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1]));
+    for (const seg of lines) strokes.push({ closed: false, pts: seg.map(norm) });
+    return strokes;
   }
 
   const DEFAULT_LAYERS = [
@@ -1113,10 +1263,14 @@
         preserveAspectRatio: 'xMidYMid meet',
       });
       if (layer.pic) {
-        thumb.appendChild(make('polygon', {
-          points: picPoints(layer.pic).map(p => p.join(',')).join(' '),
-          fill: PRESETS[layer.color],
-        }));
+        for (const st of picStrokes(layer.pic)) {
+          thumb.appendChild(make(st.closed ? 'polygon' : 'polyline', {
+            points: st.pts.map(p => p.join(',')).join(' '),
+            fill: st.closed ? PRESETS[layer.color] : 'none',
+            stroke: st.closed ? 'none' : 'var(--bg)',
+            'stroke-width': 0.04,
+          }));
+        }
       }
 
       const name = document.createElement('span');
@@ -1183,9 +1337,9 @@
         r.onerror = reject;
         r.readAsDataURL(file);
       });
-      const points = await extractContour(dataUrl, 200, 256);
-      if (points) {
-        workingLayers[uploadTarget].pic = { name: file.name, points };
+      const strokes = await extractPicture(dataUrl, 200, 256);
+      if (strokes) {
+        workingLayers[uploadTarget].pic = { name: file.name, strokes };
         renderPicRows();
       } else {
         flagUploadProblem('no shape');
@@ -1299,34 +1453,61 @@
       const members = [];
       for (let i = 0; i < N; i++) if (owner[i] === li) members.push(i);
       if (!members.length) return;
-      const pts = picPoints(layers[li].pic);
-      const w = Math.max(...pts.map(p => p[0]));
-      const h = Math.max(...pts.map(p => p[1]));
+      const strokes = picStrokes(layers[li].pic);
+      const allPts = strokes.flatMap(st => st.pts);
+      const w = Math.max(...allPts.map(p => p[0]));
+      const h = Math.max(...allPts.map(p => p[1]));
       const scale = Math.min(boxW / (w || 1), boxH / (h || 1));
       const ox = pad + (boxW - w * scale) / 2;
       const oy = top + pad + (boxH - h * scale) / 2;
-      const sampled = resamplePoints(pts, DENSE);
-      // align contours: start at the topmost point and wind the same
-      // way, so members' home stretches correspond to similar spots on
-      // every overlapping outline
-      let start = 0;
-      let area = 0;
-      for (let k = 0; k < DENSE; k++) {
-        if (sampled[k][1] < sampled[start][1]) start = k;
-        const a = sampled[k], b = sampled[(k + 1) % DENSE];
-        area += a[0] * b[1] - b[0] * a[1];
-      }
-      const outline = sampled.map((_, k) => {
-        const p = sampled[(start + (area < 0 ? DENSE - k : k)) % DENSE];
-        return [ox + p[0] * scale, oy + p[1] * scale];
+      const place = p => [ox + p[0] * scale, oy + p[1] * scale];
+      // dense samples per stroke, proportional to arc length; each stroke
+      // is a run — chains hop between runs via free connectors
+      const lenOf = st => {
+        const segs = st.closed ? st.pts.length : st.pts.length - 1;
+        let l = 0;
+        for (let i = 0; i < segs; i++) {
+          const a = st.pts[i], b = st.pts[(i + 1) % st.pts.length];
+          l += Math.hypot(b[0] - a[0], b[1] - a[1]);
+        }
+        return l;
+      };
+      const lens = strokes.map(lenOf);
+      const total = lens.reduce((a, b) => a + b, 0) || 1;
+      const dense = [];
+      const runs = [];
+      strokes.forEach((st, si) => {
+        const n = Math.max(2, Math.round(DENSE * lens[si] / total));
+        let pts = resampleStroke(st.pts, n, st.closed).map(place);
+        if (st.closed) {
+          // orient: topmost start, consistent winding, so overlapping
+          // outlines correspond and the alignment below has traction
+          let start = 0, area = 0;
+          for (let k = 0; k < n; k++) {
+            if (pts[k][1] < pts[start][1]) start = k;
+            const a = pts[k], b = pts[(k + 1) % n];
+            area += a[0] * b[1] - b[0] * a[1];
+          }
+          const src = pts;
+          pts = src.map((_, k) => src[(start + (area < 0 ? n - k : k)) % n]);
+        }
+        runs.push({ start: dense.length, len: n, closed: st.closed });
+        dense.push(...pts);
       });
-      const slot = DENSE / members.length;
+      const L = dense.length;
+      const runOf = new Int32Array(L);
+      runs.forEach((r, ri) => {
+        for (let i = 0; i < r.len; i++) runOf[r.start + i] = ri;
+      });
+      const slot = L / members.length;
       trackers.push({
         layerIndex: li,
-        outline,
+        outline: dense,
+        runs,
+        runOf,
         members,
         slot,
-        base: members.map((_, k) => Math.round(k * slot) % DENSE),
+        base: members.map((_, k) => Math.round(k * slot) % L),
         drift: Math.max(2, Math.ceil(slot * 1.5)),
       });
     });
@@ -1343,6 +1524,7 @@
     first.members.forEach((idx, k) => { targetOf.set(idx, first.outline[first.base[k]]); });
     for (let t = 1; t < trackers.length; t++) {
       const tr = trackers[t];
+      if (tr.runs.length !== 1 || !tr.runs[0].closed) continue; // rotation only fits one closed loop
       const M = tr.members.length;
       const anchors = tr.members.map(idx => {
         let lo = null, hi = null;
@@ -1353,19 +1535,19 @@
       });
       let best = { cost: Infinity, j0: 0, dir: 1 };
       for (const dir of [1, -1]) {
-        for (let j0 = 0; j0 < DENSE; j0 += 4) {
+        for (let j0 = 0; j0 < tr.outline.length; j0 += 4) {
           let cost = 0;
           for (let k = 0; k < M; k++) {
             const a = anchors[k];
             if (!a) continue;
-            const p = tr.outline[((j0 + dir * Math.round(k * tr.slot)) % DENSE + DENSE) % DENSE];
+            const p = tr.outline[((j0 + dir * Math.round(k * tr.slot)) % tr.outline.length + tr.outline.length) % tr.outline.length];
             cost += (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
           }
           if (cost < best.cost) best = { cost, j0, dir };
         }
       }
       tr.base = tr.members.map((_, k) =>
-        ((best.j0 + best.dir * Math.round(k * tr.slot)) % DENSE + DENSE) % DENSE);
+        ((best.j0 + best.dir * Math.round(k * tr.slot)) % tr.outline.length + tr.outline.length) % tr.outline.length);
     }
     return trackers;
   }
@@ -1425,9 +1607,18 @@
         const L = tr.outline.length;
         tr.members.forEach((idx, k) => {
           const node = nodes[idx];
+          const run = tr.runs[tr.runOf[tr.base[k]]];
           let bestD = Infinity, bx = 0, by = 0;
           for (let o = -tr.drift; o <= tr.drift; o++) {
-            const p = tr.outline[((tr.base[k] + o) % L + L) % L];
+            let j = tr.base[k] + o;
+            if (run.closed && tr.runs.length === 1) {
+              j = ((j % L) + L) % L;
+            } else if (run.closed) {
+              j = run.start + (((j - run.start) % run.len) + run.len) % run.len;
+            } else {
+              j = Math.max(run.start, Math.min(run.start + run.len - 1, j));
+            }
+            const p = tr.outline[j];
             const d = (p[0] - node.x) ** 2 + (p[1] - node.y) ** 2;
             if (d < bestD) { bestD = d; bx = p[0]; by = p[1]; }
           }
@@ -1529,13 +1720,16 @@
     if (!trackers) return;
     debugLayer = make('g', { class: 'debug-outlines' });
     for (const tr of trackers) {
-      debugLayer.appendChild(make('polygon', {
-        points: tr.outline.map(p => p.join(',')).join(' '),
-        fill: 'none',
-        stroke: PRESETS[layers[tr.layerIndex].color],
-        'stroke-width': 2,
-        'stroke-dasharray': '6 4',
-      }));
+      for (const run of tr.runs) {
+        const pts = tr.outline.slice(run.start, run.start + run.len);
+        debugLayer.appendChild(make(run.closed ? 'polygon' : 'polyline', {
+          points: pts.map(p => p.join(',')).join(' '),
+          fill: 'none',
+          stroke: PRESETS[layers[tr.layerIndex].color],
+          'stroke-width': 2,
+          'stroke-dasharray': '6 4',
+        }));
+      }
     }
     svg.appendChild(debugLayer);
     debugBtn.classList.add('active');
