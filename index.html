@@ -577,10 +577,22 @@
     }
   }
 
-  function clearHash() {
-    if (location.hash) {
-      history.replaceState(null, '', location.pathname + location.search);
-    }
+  // Keep the URL hash mirroring the current state so the address bar is
+  // always shareable. Debounced to 500ms: Safari throttles history
+  // updates to ~100 per 30s, and a failed replaceState must never break
+  // the app — the next change simply tries again.
+  let hashTimer = null;
+  let hashGen = 0;
+  function scheduleHashUpdate() {
+    clearTimeout(hashTimer);
+    const gen = ++hashGen;
+    hashTimer = setTimeout(async () => {
+      const encoded = await encodeState();
+      if (gen !== hashGen) return; // superseded while encoding
+      try {
+        history.replaceState(null, '', '#' + encoded);
+      } catch (e) { /* history API throttled */ }
+    }, 500);
   }
 
   // ---- Opening a link that differs from the saved drawing: preview + ask ----
@@ -643,7 +655,7 @@
     renderPreview(h);
     const keep = () => {
       dialog.close();
-      clearHash(); // so a reload doesn't ask again
+      scheduleHashUpdate(); // URL now holds MY drawing; no re-ask on reload
     };
     document.getElementById('load-link').addEventListener('click', () => {
       dialog.close();
@@ -823,13 +835,13 @@
   document.getElementById('do-reset').addEventListener('click', () => {
     confirmDialog.close();
     clearSavedState();
-    clearHash();
     if (pendingCount) {
       buildGraph(pendingCount);
       pendingCount = 0;
     }
     layoutCircle();
     redrawAll();
+    scheduleHashUpdate(); // keeps a custom node count reload-safe too
   });
 
   document.getElementById('settings-btn').addEventListener('click', () => {
@@ -851,6 +863,7 @@
     closeLoop = closeLoopInput.checked;
     saveLayers();
     rebuildEdges();
+    scheduleHashUpdate();
 
     const raw = parseInt(nodeCountInput.value, 10);
     if (!Number.isFinite(raw)) return;
@@ -896,6 +909,7 @@
     nodes[dragIndex].g.classList.remove('dragging');
     dragIndex = -1;
     saveState();
+    scheduleHashUpdate();
   }
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
