@@ -29,8 +29,27 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Compute semantic version
+        id: ver
+        # the VERSION file is the base; each commit since it last changed
+        # bumps the patch. Bump minor/major by editing VERSION.
+        run: |
+          BASE=$(cat VERSION)
+          MAJOR=$(echo "$BASE" | cut -d. -f1)
+          MINOR=$(echo "$BASE" | cut -d. -f2)
+          PATCH=$(echo "$BASE" | cut -d. -f3)
+          LAST=$(git log -1 --format=%H -- VERSION)
+          DIST=$(git rev-list --count "$LAST"..HEAD)
+          VERSION="$MAJOR.$MINOR.$((PATCH + DIST))"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deploying version $VERSION (base $BASE + $DIST commits)"
       - name: Collect site files
-        run: mkdir -p dist && cp index.html dist/ && touch dist/.nojekyll
+        run: |
+          mkdir -p dist && cp index.html dist/ && touch dist/.nojekyll
+          sed -i "s/__APP_VERSION__/${{ steps.ver.outputs.version }}/" dist/index.html
       - name: Push to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:

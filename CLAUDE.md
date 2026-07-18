@@ -24,6 +24,16 @@ pushes to `main` run the test suite and then deploy via
   When one fails, fix the loader or add a migration — never regenerate
   a frozen fixture.
 
+## Versioning
+
+Semantic versions come from the `VERSION` file: it holds the base
+(`X.Y.Z`) and every commit on `main` since the file last changed bumps
+the patch (computed in CI from git history). Bump minor/major by
+editing `VERSION` — that commit resets the distance, so it deploys as
+exactly the new base. CI stamps the version over the
+`__APP_VERSION__` placeholder in `index.html` at deploy time;
+unstamped builds display `dev` bottom-right.
+
 ## State formats
 
 Share links carry a version: an un-encoded leading digit selects the
