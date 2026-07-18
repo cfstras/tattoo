@@ -162,6 +162,24 @@
   .pic-row .pic-thumb { flex: none; width: 22px; height: 22px; }
   .pic-row .pic-name { flex: none; width: 56px; color: var(--hint); }
   .pic-row select { flex: 1; }
+  #approximate {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  #approx-bar {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  #approx-bar[hidden] { display: none; }
+  #approx-bar .speed.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
   dialog .actions {
     display: flex;
     justify-content: flex-end;
@@ -208,6 +226,12 @@
 </style>
 </head>
 <body>
+<div id="approx-bar" hidden>
+  <button id="approx-pause" class="btn" type="button">Pause</button>
+  <button class="btn speed active" data-speed="slow" type="button">Slow</button>
+  <button class="btn speed" data-speed="fast" type="button">Fast</button>
+  <button class="btn speed" data-speed="max" type="button">Max</button>
+</div>
 <div id="bar">
   <button id="share" class="btn" type="button">Share</button>
   <button id="download" class="btn" type="button">Download SVG</button>
@@ -247,6 +271,7 @@
   <h3>Pictures</h3>
   <div id="pics"></div>
   <input type="file" id="pic-file" accept="image/*" hidden>
+  <button id="approximate" type="button">Approximate!</button>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
     <button id="apply-settings" type="button">Apply</button>
@@ -521,6 +546,10 @@
         edges.push({ a: members[k], b: members[(k + 1) % members.length], line });
       }
     });
+    updateEdgePositions();
+  }
+
+  function updateEdgePositions() {
     for (const e of edges) {
       e.line.setAttribute('x1', nodes[e.a].x);
       e.line.setAttribute('y1', nodes[e.a].y);
@@ -549,6 +578,7 @@
       nodesLayer.appendChild(g);
       node.g = g;
     });
+    rebuildEdges();
   }
 
   function layoutCircle() {
@@ -580,7 +610,7 @@
 
   function redrawAll() {
     for (let i = 0; i < N; i++) updateNode(i);
-    rebuildEdges();
+    updateEdgePositions();
   }
 
   // ---- State serialization (localStorage and share links) ----
@@ -1071,6 +1101,7 @@
       row.appendChild(sel);
       picsBox.appendChild(row);
     });
+    approximateBtn.disabled = !workingLayers.some(l => l.pic);
   }
 
   picFileInput.addEventListener('change', async () => {
@@ -1110,6 +1141,7 @@
   });
   document.getElementById('do-reset').addEventListener('click', () => {
     confirmDialog.close();
+    stopApprox();
     clearSavedState();
     if (pendingCount) {
       buildGraph(pendingCount);
@@ -1121,6 +1153,7 @@
   });
 
   document.getElementById('settings-btn').addEventListener('click', () => {
+    stopApprox(); // editing settings cancels a running approximation
     nodeCountInput.value = N;
     nodeCountValue.textContent = N;
     workingLayers = layers.map(l => ({ ...l }));
@@ -1147,6 +1180,159 @@
     if (count === N) return;
     pendingCount = count;
     confirmDialog.showModal();
+  });
+
+  // ---- Approximate: walk nodes toward per-layer silhouette targets ----
+  const approxBar = document.getElementById('approx-bar');
+  const approxPauseBtn = document.getElementById('approx-pause');
+  const approximateBtn = document.getElementById('approximate');
+  const approx = { running: false, paused: false, speed: 'slow', gen: 0 };
+  const SPEED_DELAYS = { slow: 200, fast: 50 };
+
+  function computeTargets() {
+    const pictured = [];
+    layers.forEach((l, i) => { if (l.pic && validPic(l.pic)) pictured.push(i); });
+    if (!pictured.length) return null;
+    // each node follows the picture of the LAST pictured layer containing
+    // it, so overlapping memberships (all vs even) don't fight each other
+    const controller = new Array(N).fill(-1);
+    for (const li of pictured) {
+      for (let i = 0; i < N; i++) {
+        if (TYPES[layers[li].type].member(i + 1)) controller[i] = li;
+      }
+    }
+    // pictures sit side by side in equal-width slots below the toolbar
+    const rect = svg.getBoundingClientRect();
+    const top = 56, pad = 24;
+    const slotW = (rect.width - pad * 2) / pictured.length;
+    const slotH = rect.height - top - pad * 2;
+    const targets = new Array(N).fill(null);
+    pictured.forEach((li, slot) => {
+      const members = [];
+      for (let i = 0; i < N; i++) if (controller[i] === li) members.push(i);
+      if (!members.length) return;
+      const pts = picPoints(layers[li].pic);
+      const w = Math.max(...pts.map(p => p[0]));
+      const h = Math.max(...pts.map(p => p[1]));
+      const scale = Math.min((slotW * 0.9) / (w || 1), slotH / (h || 1));
+      const ox = pad + slotW * slot + (slotW - w * scale) / 2;
+      const oy = top + pad + (slotH - h * scale) / 2;
+      const sampled = resamplePoints(pts, members.length);
+      // align contours across pictures: start at the topmost point and
+      // wind the same way, so chains that alternate between two shapes
+      // (like all-nodes vs evens) sweep both outlines in sync instead
+      // of criss-crossing the whole canvas
+      let start = 0;
+      let area = 0;
+      for (let k = 0; k < sampled.length; k++) {
+        if (sampled[k][1] < sampled[start][1]) start = k;
+        const a = sampled[k], b = sampled[(k + 1) % sampled.length];
+        area += a[0] * b[1] - b[0] * a[1];
+      }
+      const n = sampled.length;
+      const oriented = sampled.map((_, k) =>
+        sampled[(start + (area < 0 ? n - k : k)) % n]);
+      members.forEach((idx, k) => {
+        targets[idx] = [ox + oriented[k][0] * scale, oy + oriented[k][1] * scale];
+      });
+    });
+    return targets;
+  }
+
+  function stopApprox() {
+    approx.running = false;
+    approx.gen++;
+    approxBar.hidden = true;
+  }
+
+  async function startApprox() {
+    stopApprox();
+    const targets = computeTargets();
+    if (!targets) return;
+    layoutCircle(); // start from a clean reset, as advertised
+    redrawAll();
+    approx.running = true;
+    approx.paused = false;
+    approxPauseBtn.textContent = 'Pause';
+    approxBar.hidden = false;
+    const gen = approx.gen;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    const ALPHA = 0.2; // fraction of the remaining distance per step
+    let noiseMag = 8; // px of random wander, decaying per iteration
+    let iter = 0;
+    let maxMove = Infinity;
+    window.__approx = { done: false, iter, maxMove }; // observability for tests
+
+    let batchStart = performance.now();
+    while (gen === approx.gen) {
+      while (approx.paused && gen === approx.gen) await sleep(100);
+      if (gen !== approx.gen) return;
+
+      maxMove = 0;
+      for (let i = 0; i < N; i++) {
+        const t = targets[i];
+        if (!t) continue;
+        const ang = Math.random() * 2 * Math.PI;
+        const mag = Math.random() * noiseMag;
+        const mx = ALPHA * (t[0] - nodes[i].x) + Math.cos(ang) * mag;
+        const my = ALPHA * (t[1] - nodes[i].y) + Math.sin(ang) * mag;
+        nodes[i].x += mx;
+        nodes[i].y += my;
+        maxMove = Math.max(maxMove, Math.hypot(mx, my));
+      }
+      noiseMag *= 0.97;
+      iter++;
+      redrawAll();
+      window.__approx = { done: false, iter, maxMove };
+
+      if (maxMove < 1) break; // every node moved less than 1px: converged
+
+      if (approx.speed === 'max') {
+        // flat out, but yield 100ms every second so the page can paint
+        if (performance.now() - batchStart >= 1000) {
+          await sleep(100);
+          batchStart = performance.now();
+        }
+      } else {
+        await sleep(SPEED_DELAYS[approx.speed]);
+        batchStart = performance.now();
+      }
+    }
+    if (gen !== approx.gen) return;
+    window.__approx = { done: true, iter, maxMove };
+    stopApprox();
+    saveState();
+    scheduleHashUpdate();
+  }
+
+  approxPauseBtn.addEventListener('click', () => {
+    approx.paused = !approx.paused;
+    approxPauseBtn.textContent = approx.paused ? 'Resume' : 'Pause';
+  });
+  for (const btn of document.querySelectorAll('#approx-bar .speed')) {
+    btn.addEventListener('click', () => {
+      approx.speed = btn.dataset.speed;
+      document.querySelectorAll('#approx-bar .speed').forEach(b =>
+        b.classList.toggle('active', b === btn));
+    });
+  }
+
+  approximateBtn.addEventListener('click', () => {
+    settingsDialog.close();
+    // commit the dialog's settings; the node count applies without the
+    // usual warning because approximation starts with a reset anyway
+    layers = workingLayers.map(l => ({ ...l }));
+    closeLoop = closeLoopInput.checked;
+    saveLayers();
+    const raw = parseInt(nodeCountInput.value, 10);
+    if (Number.isFinite(raw)) {
+      const count = Math.max(MIN_NODES, Math.min(MAX_NODES, raw));
+      if (count !== N) buildGraph(count);
+    }
+    rebuildEdges();
+    scheduleHashUpdate();
+    startApprox();
   });
 
   // ---- Dragging via pointer events (mouse + touch) ----
