@@ -34,18 +34,12 @@ jobs:
           fetch-tags: true
       - name: Compute semantic version
         id: ver
-        # the VERSION file is the base; each commit since it last changed
-        # bumps the patch. Bump minor/major by editing VERSION.
+        # VERSION file is the base; every commit since bumps it per its
+        # Conventional Commit type (see scripts/version.sh)
         run: |
-          BASE=$(cat VERSION)
-          MAJOR=$(echo "$BASE" | cut -d. -f1)
-          MINOR=$(echo "$BASE" | cut -d. -f2)
-          PATCH=$(echo "$BASE" | cut -d. -f3)
-          LAST=$(git log -1 --format=%H -- VERSION)
-          DIST=$(git rev-list --count "$LAST"..HEAD)
-          VERSION="$MAJOR.$MINOR.$((PATCH + DIST))"
+          VERSION=$(bash scripts/version.sh)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Deploying version $VERSION (base $BASE + $DIST commits)"
+          echo "Deploying version $VERSION"
       - name: Collect site files
         run: |
           mkdir -p dist && cp index.html dist/ && touch dist/.nojekyll

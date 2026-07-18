@@ -2,7 +2,8 @@
   "name": "tattoo",
   "private": true,
   "scripts": {
-    "test": "node tests/run-all.js"
+    "test": "node tests/run-all.js",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

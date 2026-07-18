@@ -26,13 +26,24 @@ pushes to `main` run the test suite and then deploy via
 
 ## Versioning
 
-Semantic versions come from the `VERSION` file: it holds the base
-(`X.Y.Z`) and every commit on `main` since the file last changed bumps
-the patch (computed in CI from git history). Bump minor/major by
-editing `VERSION` — that commit resets the distance, so it deploys as
-exactly the new base. CI stamps the version over the
+Semantic versions come from the `VERSION` file plus Conventional
+Commits: the file holds the base (`X.Y.Z`), and every commit on
+`main` since it last changed bumps the version by its type —
+`type!:` (breaking) bumps major, `feat:` bumps minor, anything else
+bumps patch (`scripts/version.sh` computes this; CI uses it). Editing
+`VERSION` resets the base. CI stamps the result over the
 `__APP_VERSION__` placeholder in `index.html` at deploy time;
 unstamped builds display `dev` bottom-right.
+
+## Commit messages
+
+Commit subjects follow Conventional Commits and drive the versioning
+above: `<type>(<scope>)?: <description>` with types `feat fix docs
+style refactor perf test build ci chore`, and `!` after the type for
+breaking changes. The committed `.githooks/commit-msg` hook enforces
+this — it activates via `npm install` (the `prepare` script sets
+`core.hooksPath`), or manually with
+`git config core.hooksPath .githooks`.
 
 ## State formats
 

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Enforce Conventional Commits: every commit bumps the deployed version
+# (feat: minor, type!: major, anything else patch), so the subject must
+# declare its type. Enable with: git config core.hooksPath .githooks
+# (npm install does this via the prepare script).
+msg=$(head -n1 "$1")
+
+case "$msg" in
+  "Merge "*|"Revert "*|fixup!*|squash!*) exit 0 ;;
+esac
+
+if echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\([a-z0-9-]+\))?!?: .+'; then
+  exit 0
+fi
+
+echo "commit-msg: subject must follow Conventional Commits:" >&2
+echo "  <type>(<scope>)?: <description>" >&2
+echo "  types: feat fix docs style refactor perf test build ci chore" >&2
+echo "  breaking changes: append ! to the type (e.g. feat!: ...)" >&2
+echo "  got: $msg" >&2
+exit 1
