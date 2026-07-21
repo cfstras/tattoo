@@ -318,6 +318,9 @@
   <h3>Pictures</h3>
   <div id="pics"></div>
   <input type="file" id="pic-file" accept="image/*" hidden>
+  <label>Start from random positions
+    <input type="checkbox" id="random-start">
+  </label>
   <button id="approximate" type="button">Approximate!</button>
   <div class="actions">
     <button id="cancel-settings" type="button">Cancel</button>
@@ -333,7 +336,7 @@
 <script>
 (async function () {
   // CI stamps the deployed version over this placeholder
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
   document.getElementById('version').textContent =
     APP_VERSION.indexOf('__') === 0 ? 'dev' : 'v' + APP_VERSION;
 
@@ -790,6 +793,14 @@
     rebuildEdges();
   }
 
+  function layoutRandom() {
+    const rect = svg.getBoundingClientRect();
+    for (let i = 0; i < N; i++) {
+      nodes[i].x = 24 + Math.random() * (rect.width - 48);
+      nodes[i].y = 56 + Math.random() * (rect.height - 56 - 24);
+    }
+  }
+
   function layoutCircle() {
     const rect = svg.getBoundingClientRect();
     const cx = rect.width / 2, cy = rect.height / 2;
@@ -974,7 +985,9 @@
   const LAYERS_KEY = 'node-drawing-layers-v1';
   const LOOP_KEY = 'node-drawing-closeloop-v1';
   const STYLE_KEY = 'node-drawing-nodestyle-v1';
+  const RANDOM_KEY = 'node-drawing-randomstart-v1';
   let nodeStyle = 'circle'; // 'circle' | 'number'
+  let randomStart = false; // approximation starts scattered, not on the circle
 
   function applyNodeStyle() {
     svg.classList.toggle('plain-nodes', nodeStyle === 'number');
@@ -991,6 +1004,7 @@
       localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
       localStorage.setItem(LOOP_KEY, closeLoop ? '1' : '0');
       localStorage.setItem(STYLE_KEY, nodeStyle);
+      localStorage.setItem(RANDOM_KEY, randomStart ? '1' : '0');
     } catch (e) { /* ignore */ }
   }
 
@@ -1120,6 +1134,7 @@
   try { closeLoop = localStorage.getItem(LOOP_KEY) === '1'; } catch (e) { /* ignore */ }
   try {
     if (localStorage.getItem(STYLE_KEY) === 'number') nodeStyle = 'number';
+    randomStart = localStorage.getItem(RANDOM_KEY) === '1';
   } catch (e) { /* ignore */ }
   applyNodeStyle();
   const storedPositions = loadStoredPositions();
@@ -1404,10 +1419,12 @@
   });
 
   const nodeStyleSel = document.getElementById('node-style');
+  const randomStartInput = document.getElementById('random-start');
 
   function commitSettings() {
     layers = workingLayers.map(l => ({ ...l }));
     closeLoop = closeLoopInput.checked;
+    randomStart = randomStartInput.checked;
     nodeStyle = nodeStyleSel.value === 'number' ? 'number' : 'circle';
     saveLayers();
     applyNodeStyle();
@@ -1422,6 +1439,7 @@
     renderLayerRows();
     closeLoopInput.checked = closeLoop;
     nodeStyleSel.value = nodeStyle;
+    randomStartInput.checked = randomStart;
     settingsDialog.showModal();
   });
   document.getElementById('cancel-settings').addEventListener('click', () => {
@@ -1587,7 +1605,8 @@
     stopApprox();
     const trackers = computeTargets();
     if (!trackers) return;
-    layoutCircle(); // start from a clean reset, as advertised
+    if (randomStart) layoutRandom(); // as chosen in settings
+    else layoutCircle(); // the default clean reset
     redrawAll();
     approx.running = true;
     approx.paused = false;
