@@ -119,6 +119,38 @@ const APP = 'file://' + require('path').resolve(__dirname, '..', 'index.html');
   console.log('reset cancels the run and hides the bar:',
     !(await barVisible()) ? 'PASS' : 'FAIL');
 
+  // --- Random start scatters nodes off the single circle radius ---
+  await page.click('#settings-btn');
+  await page.check('#random-start');
+  await page.click('#approximate');
+  await page.click('#do-approx');
+  await page.click('#approx-pause'); // freeze before it converges
+  const scatter = await page.evaluate(() => {
+    const pts = [...document.querySelectorAll('.node')].map(g => {
+      const m = g.getAttribute('transform').match(/translate\(([-\d.]+), ([-\d.]+)\)/);
+      return [+m[1], +m[2]];
+    });
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    const radii = pts.map(p => Math.hypot(p[0] - cx, p[1] - cy));
+    const mean = radii.reduce((s, r) => s + r, 0) / radii.length;
+    const variance = radii.reduce((s, r) => s + (r - mean) ** 2, 0) / radii.length;
+    return { cov: Math.sqrt(variance) / mean };
+  });
+  console.log('random start scatters nodes off a single radius:',
+    scatter.cov > 0.2 ? 'PASS' : 'FAIL', JSON.stringify(scatter));
+  await page.click('#reset');
+  await page.click('#do-reset');
+
+  // --- The random-start choice persists across reloads ---
+  await page.reload();
+  await page.click('#settings-btn');
+  const persisted = await page.evaluate(() =>
+    document.getElementById('random-start').checked);
+  console.log('random-start setting persists after reload:', persisted ? 'PASS' : 'FAIL');
+  await page.uncheck('#random-start'); // restore the default for later checks
+  await page.click('#apply-settings');
+
   // --- No pictures -> approximate disabled ---
   await page.click('#settings-btn');
   await page.evaluate(() => {
